@@ -67,6 +67,7 @@ class RecentlyUsedTabContent extends St.BoxLayout {
         this._settings = settings;
         this._clipboardManager = clipboardManager;
         this._settingsBtnFocusTimeoutId = 0;
+        this._gifSectionEnabled = this._settings.get_string('gif-provider') !== 'none';
 
         // Store recent managers for different feature types
         this._recentManagers = {};
@@ -82,6 +83,19 @@ class RecentlyUsedTabContent extends St.BoxLayout {
         this._renderSession = null;
 
         this._buildUI();
+        this._applyGifSectionState();
+
+        this._signalIds.push({
+            obj: this._settings,
+            id: this._settings.connect('changed::gif-provider', () => {
+                this._gifSectionEnabled = this._settings.get_string('gif-provider') !== 'none';
+                this._applyGifSectionState();
+                if (this._recentManagers.gif) {
+                    this._renderAll();
+                }
+            })
+        });
+
         this._loadRecentManagers()
             .then(() => this._connectSignalsAndRender())
             .catch(e => console.error('[AIO-Clipboard] Failed to load recent managers:', e));
@@ -236,6 +250,28 @@ class RecentlyUsedTabContent extends St.BoxLayout {
 
         // Store the separator along with the other section parts
         this._sections[id] = { section, showAllBtn, bodyContainer, separator };
+    }
+
+    /**
+     * Update the GIF section visibility based on provider availability.
+     * @private
+     */
+    _applyGifSectionState() {
+        const gifSection = this._sections['gif'];
+
+        if (!gifSection) {
+            return;
+        }
+
+        gifSection.showAllBtn.visible = this._gifSectionEnabled;
+        gifSection.showAllBtn.reactive = this._gifSectionEnabled;
+        gifSection.showAllBtn.can_focus = this._gifSectionEnabled;
+
+        if (!this._gifSectionEnabled) {
+            gifSection.section.hide();
+            gifSection.separator.visible = false;
+            gifSection.bodyContainer.set_child(null);
+        }
     }
 
     // ========================================================================
@@ -442,6 +478,15 @@ class RecentlyUsedTabContent extends St.BoxLayout {
 
         if (!manager) return;
 
+        if (id === 'gif' && !this._gifSectionEnabled) {
+            if (sectionData) {
+                sectionData.section.hide();
+                sectionData.separator.visible = false;
+                sectionData.bodyContainer.set_child(null);
+            }
+            return;
+        }
+
         const items = manager.getRecents().slice(0, 5);
 
         if (items.length === 0) {
@@ -450,7 +495,9 @@ class RecentlyUsedTabContent extends St.BoxLayout {
         }
 
         sectionData.section.show();
-        this._focusGrid.push([sectionData.showAllBtn]);
+        if (sectionData.showAllBtn.visible) {
+            this._focusGrid.push([sectionData.showAllBtn]);
+        }
 
         const grid = new St.Widget({
             layout_manager: new Clutter.GridLayout({
