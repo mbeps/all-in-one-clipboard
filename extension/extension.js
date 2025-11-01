@@ -333,6 +333,30 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
         this._setMainTabBarVisibility();
     }
 
+
+    /**
+     * Updates the visual state of the tab buttons so the active tab is highlighted.
+     * Mirrors the approach used by category viewers for consistency.
+     * @private
+     */
+    _updateTabButtonSelection() {
+        if (!this._tabButtons) {
+            return;
+        }
+
+        for (const [name, button] of Object.entries(this._tabButtons)) {
+            if (!button) {
+                continue;
+            }
+
+            if (name === this._activeTabName) {
+                button.add_style_pseudo_class('checked');
+            } else {
+                button.remove_style_pseudo_class('checked');
+            }
+        }
+    }
+
     /**
      * Disconnects signals from the previously active tab's content actor.
      * @param {St.Actor} tabActor - The actor of the tab content being deactivated.
@@ -393,6 +417,7 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
         // Update state
         this._activeTabName = tabName;
         this._lastActiveTabName = tabName;
+        this._updateTabButtonSelection();
         const tabId = getTabIdentifier(tabName);
 
         // Visibility Management
