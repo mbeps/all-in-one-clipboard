@@ -28,6 +28,7 @@ export default class AllInOneClipboardPreferences extends ExtensionPreferences {
 
         // Add all preference groups
         this._addGeneralGroup(page, settings);
+        this._addTabVisibilityGroup(page, settings);
         this._addKeyboardShortcutsGroup(page, settings);
         this._addClipboardHistoryGroup(page, settings);
         this._addRecentItemsGroup(page, settings);
@@ -158,6 +159,77 @@ export default class AllInOneClipboardPreferences extends ExtensionPreferences {
             'sensitive',
             GObject.BindingFlags.SYNC_CREATE
         );
+    }
+
+    /**
+     * Add the "Tab Visibility" preferences group to the page.
+     *
+     * @param {Adw.PreferencesPage} page - The preferences page to add the group to.
+     * @param {Gio.Settings} settings - The Gio.Settings instance.
+     */
+    _addTabVisibilityGroup(page, settings) {
+        const group = new Adw.PreferencesGroup({
+            title: _('Tab Visibility'),
+            description: _('Choose which tabs are shown in the menu. At least one must remain enabled.')
+        });
+        page.add(group);
+
+        const tabToggles = [
+            { key: 'enable-recently-used-tab', title: _('Enable Recently Used Tab') },
+            { key: 'enable-emoji-tab', title: _('Enable Emoji Tab') },
+            { key: 'enable-gif-tab', title: _('Enable GIF Tab') },
+            { key: 'enable-kaomoji-tab', title: _('Enable Kaomoji Tab') },
+            { key: 'enable-symbols-tab', title: _('Enable Symbols Tab') },
+            { key: 'enable-clipboard-tab', title: _('Enable Clipboard Tab') }
+        ];
+
+        const rows = [];
+
+        tabToggles.forEach(toggle => {
+            const row = new Adw.SwitchRow({
+                title: toggle.title
+            });
+            rows.push(row);
+            group.add(row);
+
+            settings.bind(
+                toggle.key,
+                row, 'active',
+                Gio.SettingsBindFlags.DEFAULT
+            );
+
+            row.connect('notify::active', () => {
+                this._updateTabToggleSensitivity(rows);
+            });
+        });
+
+        this._updateTabToggleSensitivity(rows);
+    }
+
+    /**
+     * Ensure only one tab toggle is disabled at a time, keeping at least one tab enabled.
+     *
+     * @param {Adw.SwitchRow[]} rows - Switch rows representing tab toggles.
+     * @private
+     */
+    _updateTabToggleSensitivity(rows) {
+        if (!rows.length) {
+            return;
+        }
+
+        const enabledRows = rows.filter(row => row.active);
+
+        if (enabledRows.length === 0) {
+            rows.forEach(row => row.set_sensitive(true));
+            return;
+        }
+
+        if (enabledRows.length === 1) {
+            const activeRow = enabledRows[0];
+            rows.forEach(row => row.set_sensitive(row !== activeRow));
+        } else {
+            rows.forEach(row => row.set_sensitive(true));
+        }
     }
 
     /**

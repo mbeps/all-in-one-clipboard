@@ -18,6 +18,38 @@
             <description>Determines where the menu appears when opened via shortcut while the panel icon is hidden. Can be 'cursor', 'center', or 'window'.</description>
         </key>
 
+        <!-- Tab Visibility -->
+        <key name="enable-recently-used-tab" type="b">
+            <default>true</default>
+            <summary>Enable Recently Used Tab</summary>
+            <description>Shows the Recently Used tab in the extension menu when enabled.</description>
+        </key>
+        <key name="enable-emoji-tab" type="b">
+            <default>true</default>
+            <summary>Enable Emoji Tab</summary>
+            <description>Shows the Emoji tab in the extension menu when enabled.</description>
+        </key>
+        <key name="enable-gif-tab" type="b">
+            <default>true</default>
+            <summary>Enable GIF Tab</summary>
+            <description>Shows the GIF tab in the extension menu when enabled.</description>
+        </key>
+        <key name="enable-kaomoji-tab" type="b">
+            <default>true</default>
+            <summary>Enable Kaomoji Tab</summary>
+            <description>Shows the Kaomoji tab in the extension menu when enabled.</description>
+        </key>
+        <key name="enable-symbols-tab" type="b">
+            <default>true</default>
+            <summary>Enable Symbols Tab</summary>
+            <description>Shows the Symbols tab in the extension menu when enabled.</description>
+        </key>
+        <key name="enable-clipboard-tab" type="b">
+            <default>true</default>
+            <summary>Enable Clipboard Tab</summary>
+            <description>Shows the Clipboard tab in the extension menu when enabled.</description>
+        </key>
+
         <!-- Keyboard Shortcuts -->
         <key name="shortcut-toggle-main" type="as">
             <default>[]</default>

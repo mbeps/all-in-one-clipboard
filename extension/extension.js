@@ -26,24 +26,54 @@ function getTabIdentifier(tabName) {
 /**
  * Maps main tab names to their corresponding icon filenames.
  */
-const MAIN_TAB_ICONS_MAP = {
-    "Recently Used": 'utility-recents-symbolic.svg',
-    "Emoji": 'main-emoji-symbolic.svg',
-    "GIF": 'main-gif-symbolic.svg',
-    "Kaomoji": 'main-kaomoji-symbolic.svg',
-    "Symbols": 'main-symbols-symbolic.svg',
-    "Clipboard": 'main-clipboard-symbolic.svg'
-};
+const TAB_DEFINITIONS = [
+    {
+        id: 'recently-used',
+        name: "Recently Used",
+        settingKey: 'enable-recently-used-tab',
+        icon: 'utility-recents-symbolic.svg'
+    },
+    {
+        id: 'emoji',
+        name: "Emoji",
+        settingKey: 'enable-emoji-tab',
+        icon: 'main-emoji-symbolic.svg'
+    },
+    {
+        id: 'gif',
+        name: "GIF",
+        settingKey: 'enable-gif-tab',
+        icon: 'main-gif-symbolic.svg'
+    },
+    {
+        id: 'kaomoji',
+        name: "Kaomoji",
+        settingKey: 'enable-kaomoji-tab',
+        icon: 'main-kaomoji-symbolic.svg'
+    },
+    {
+        id: 'symbols',
+        name: "Symbols",
+        settingKey: 'enable-symbols-tab',
+        icon: 'main-symbols-symbolic.svg'
+    },
+    {
+        id: 'clipboard',
+        name: "Clipboard",
+        settingKey: 'enable-clipboard-tab',
+        icon: 'main-clipboard-symbolic.svg'
+    }
+];
 
 /**
  * Tabs that function as "full-view" and should hide the main tab bar.
  */
-const FULL_VIEW_TABS = [
-    "Emoji",
-    "GIF",
-    "Kaomoji",
-    "Symbols"
-];
+const FULL_VIEW_TAB_IDS = new Set([
+    'emoji',
+    'gif',
+    'kaomoji',
+    'symbols'
+]);
 
 /**
  * The main panel indicator and menu for the All-in-One Clipboard extension.
@@ -59,8 +89,21 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
         this._extension = extension;
         this._clipboardManager = clipboardManager;
 
+        this._tabDefinitions = TAB_DEFINITIONS.map(definition => ({
+            ...definition,
+            translatedName: _(definition.name)
+        }));
+        this._tabDefinitionByTranslatedName = new Map();
+        this._tabDefinitions.forEach(definition => {
+            this._tabDefinitionByTranslatedName.set(definition.translatedName, definition);
+        });
+
         // Create the translated list of full-view tabs now that gettext is initialized.
-        this._fullViewTabs = FULL_VIEW_TABS.map(tab => _(tab));
+        this._fullViewTabs = new Set(
+            this._tabDefinitions
+                .filter(definition => FULL_VIEW_TAB_IDS.has(definition.id))
+                .map(definition => definition.translatedName)
+        );
 
         this._tabButtons = {};
         this._activeTabName = null;
@@ -75,27 +118,24 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
         this._currentTabNavigateSignalId = 0;
         this._selectTabTimeoutId = 0;
         this._loadingIndicatorTimeoutId = 0;
-        this._gifProviderSignalId = 0;
-        this._gifTabButton = null;
+        this._tabSettingsSignalIds = [];
+        this._hasMultipleTabs = true;
 
-        this.TAB_NAMES = [
-            _("Recently Used"),
-            _("Emoji"),
-            _("GIF"),
-            _("Kaomoji"),
-            _("Symbols"),
-            _("Clipboard")
-        ];
+        this.TAB_NAMES = this._tabDefinitions.map(definition => definition.translatedName);
 
         const icon = new St.Icon({ icon_name: 'edit-copy-symbolic', style_class: 'system-status-icon' });
         this.add_child(icon);
 
         this._buildMenu();
 
-        this._gifProviderSignalId = this._settings.connect('changed::gif-provider', () => {
-            this._updateGifAvailability();
+        this._tabDefinitions.forEach(definition => {
+            const signalId = this._settings.connect(`changed::${definition.settingKey}`, () => {
+                this._updateTabButtonsVisibility();
+            });
+            this._tabSettingsSignalIds.push(signalId);
         });
-        this._updateGifAvailability();
+
+        this._updateTabButtonsVisibility();
     }
 
     /**
@@ -126,13 +166,11 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
         mainVerticalBox.add_child(this._tabContentArea);
 
         // Build tab buttons with themed icons
-        const gifTabName = _("GIF");
-        this.TAB_NAMES.forEach(name => {
-            const translatedName = _(name);
-            const iconFile = MAIN_TAB_ICONS_MAP[translatedName];
+        this._tabDefinitions.forEach(definition => {
+            const translatedName = definition.translatedName;
 
             // Use the helper function to create themed icon
-            const iconWidget = createThemedIcon(this._extension.path, iconFile, 16);
+            const iconWidget = createThemedIcon(this._extension.path, definition.icon, 16);
 
             const button = new St.Button({
                 style_class: 'aio-clipboard-tab-button button',
@@ -143,13 +181,9 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
 
             button.tooltip_text = translatedName;
 
-            button.connect('clicked', () => this._selectTab(name));
-            this._tabButtons[name] = button;
+            button.connect('clicked', () => this._selectTab(translatedName));
+            this._tabButtons[translatedName] = button;
             this._mainTabBar.add_child(button);
-
-            if (translatedName === gifTabName) {
-                this._gifTabButton = button;
-            }
         });
 
         this._mainTabBar.set_reactive(true);
@@ -166,9 +200,16 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
 
                 // Otherwise, this is a general open (e.g., panel click), so run default logic.
                 const rememberLastTab = this._settings.get_boolean('remember-last-tab');
-                const targetTab = (rememberLastTab && this._lastActiveTabName)
-                    ? this._lastActiveTabName
-                    : this.TAB_NAMES[0];
+                const enabledTabNames = this._getEnabledTabNames();
+                const defaultTab = enabledTabNames[0];
+                if (!defaultTab) {
+                    return;
+                }
+
+                let targetTab = defaultTab;
+                if (rememberLastTab && this._lastActiveTabName && enabledTabNames.includes(this._lastActiveTabName)) {
+                    targetTab = this._lastActiveTabName;
+                }
 
                 // If an explicit tab target was set (e.g., by a specific-tab shortcut), use that.
                 GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
@@ -196,55 +237,134 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
     }
 
     /**
-     * Determines if the GIF feature should be available.
-     * @returns {boolean} True when a GIF provider is configured.
+     * Determines if the tab bar should be visible for the given tab.
+     * @param {string|null} tabName - The translated tab name.
+     * @returns {boolean} Whether the tab bar should be shown.
      * @private
      */
-    _isGifFeatureEnabled() {
-        if (!this._settings) {
+    _shouldShowTabBarForTab(tabName) {
+        if (!this._hasMultipleTabs) {
             return false;
         }
 
-        return this._settings.get_string('gif-provider') !== 'none';
+        if (!tabName) {
+            return true;
+        }
+
+        return !this._fullViewTabs.has(tabName);
     }
 
     /**
-     * Updates GIF tab availability when the provider setting changes.
+     * Returns the list of tab definitions that are currently enabled.
+     * Ensures at least one tab remains enabled by re-enabling the default tab if necessary.
+     * @returns {Array<object>} Enabled tab definition objects.
      * @private
      */
-    _updateGifAvailability() {
-        const gifTabName = _("GIF");
-        const gifEnabled = this._isGifFeatureEnabled();
-
-        if (this._gifTabButton) {
-            this._gifTabButton.visible = gifEnabled;
-            this._gifTabButton.reactive = gifEnabled;
-            this._gifTabButton.can_focus = gifEnabled;
+    _getEnabledTabDefinitions() {
+        if (!this._settings) {
+            return this._tabDefinitions;
         }
 
-        if (!gifEnabled) {
-            const fallbackTab = _("Recently Used");
+        const enabledDefinitions = this._tabDefinitions.filter(definition => {
+            try {
+                return this._settings.get_boolean(definition.settingKey);
+            } catch (e) {
+                return true;
+            }
+        });
 
-            if (this._activeTabName === gifTabName) {
+        if (enabledDefinitions.length === 0 && this._tabDefinitions.length > 0) {
+            const fallbackDefinition = this._tabDefinitions[0];
+            this._settings.set_boolean(fallbackDefinition.settingKey, true);
+            return [fallbackDefinition];
+        }
+
+        return enabledDefinitions;
+    }
+
+    /**
+     * Returns the translated names for all enabled tabs.
+     * @returns {string[]} Enabled tab names.
+     * @private
+     */
+    _getEnabledTabNames() {
+        return this._getEnabledTabDefinitions().map(definition => definition.translatedName);
+    }
+
+    /**
+     * Determines if a specific tab is currently enabled.
+     * @param {string} tabName - The translated tab name.
+     * @returns {boolean} Whether the tab is enabled.
+     * @private
+     */
+    _isTabEnabled(tabName) {
+        const definition = this._tabDefinitionByTranslatedName.get(tabName);
+        if (!definition) {
+            return false;
+        }
+
+        if (!this._settings) {
+            return true;
+        }
+
+        try {
+            return this._settings.get_boolean(definition.settingKey);
+        } catch (e) {
+            return true;
+        }
+    }
+
+    /**
+     * Updates button visibility to reflect the current tab enablement state.
+     * Ensures the active tab remains valid.
+     * @private
+     */
+    _updateTabButtonsVisibility() {
+        if (!this._tabButtons) {
+            return;
+        }
+
+        const enabledTabNames = this._getEnabledTabNames();
+        const enabledTabSet = new Set(enabledTabNames);
+        this._hasMultipleTabs = enabledTabNames.length > 1;
+
+        Object.entries(this._tabButtons).forEach(([tabName, button]) => {
+            const isEnabled = enabledTabSet.has(tabName);
+            button.visible = isEnabled;
+            button.reactive = isEnabled;
+            button.can_focus = isEnabled;
+        });
+
+        if (enabledTabNames.length === 0) {
+            return;
+        }
+
+        if (!enabledTabSet.has(this._activeTabName)) {
+            const fallbackTab = enabledTabNames[0];
+            if (fallbackTab) {
                 if (this.menu?.isOpen) {
                     this._selectTab(fallbackTab).catch(e => {
-                        console.error(`[AIO-Clipboard] Failed to switch away from disabled GIF tab: ${e.message}`);
+                        console.error(`[AIO-Clipboard] Failed to switch to fallback tab '${fallbackTab}': ${e.message}`);
                     });
-                }
-                this._activeTabName = fallbackTab;
-                if (!this.menu?.isOpen) {
+                } else {
                     if (this._currentTabActor) {
                         this._disconnectTabSignals(this._currentTabActor);
+                        this._currentTabActor.destroy();
+                        this._currentTabActor = null;
                     }
-                    this._currentTabActor?.destroy();
-                    this._currentTabActor = null;
+                    this._tabContentArea?.set_child?.(null);
                 }
-            }
-
-            if (this._lastActiveTabName === gifTabName) {
+                this._activeTabName = fallbackTab;
                 this._lastActiveTabName = fallbackTab;
+                this._setMainTabBarVisibility(this._shouldShowTabBarForTab(this._activeTabName));
             }
         }
+
+        if (!enabledTabSet.has(this._lastActiveTabName)) {
+            this._lastActiveTabName = enabledTabNames[0];
+        }
+
+        this._setMainTabBarVisibility(this._shouldShowTabBarForTab(this._activeTabName));
     }
 
     /**
@@ -271,15 +391,24 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
     }
 
     /**
+     * Exposes the current tab enablement state for external checks.
+     * @param {string} tabName - The translated tab name.
+     * @returns {boolean} Whether the tab is enabled.
+     */
+    isTabEnabled(tabName) {
+        return this._isTabEnabled(tabName);
+    }
+
+    /**
      * Selects and loads the specified tab, updating the UI accordingly.
      * @param {string} tabName - The name of the tab to select.
      * @private
      */
     async _selectTab(tabName) {
-        const gifTabName = _("GIF");
-        if (tabName === gifTabName && !this._isGifFeatureEnabled()) {
-            const fallbackTab = _("Recently Used");
-            if (fallbackTab === gifTabName) {
+        if (!this._isTabEnabled(tabName)) {
+            const enabledTabNames = this._getEnabledTabNames();
+            const fallbackTab = enabledTabNames.find(name => name !== tabName) ?? enabledTabNames[0];
+            if (!fallbackTab || fallbackTab === tabName) {
                 return;
             }
             return this._selectTab(fallbackTab);
@@ -294,27 +423,15 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
 
         // Store references to old state
         const oldActor = this._currentTabActor;
-        const wasOldTabFullView = this._fullViewTabs.includes(this._activeTabName);
 
         // Update state
         this._activeTabName = tabName;
         this._lastActiveTabName = tabName;
         const tabId = getTabIdentifier(tabName);
-        const isNewTabFullView = this._fullViewTabs.includes(tabName);
+        const shouldShowTabBar = this._shouldShowTabBarForTab(tabName);
 
         // Visibility Management
-        if (isNewTabFullView) {
-            // Moving to a full-view tab
-            if (wasOldTabFullView) {
-                this._setMainTabBarVisibility(false);
-            }
-            // If coming from non-full to full, we hide the tab bar after loading new content.
-        } else if (wasOldTabFullView) {
-            // Moving to non-full-view tab
-        } else {
-            // Ensure the bar is visible in non-full-view tabs.
-            this._setMainTabBarVisibility(true);
-        }
+        this._setMainTabBarVisibility(shouldShowTabBar);
 
         // Asynchronous Content Loading
         if (this._loadingIndicatorTimeoutId) {
@@ -388,13 +505,7 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
             this._tabContentArea.set_child(newContentActor);
 
             // Adjust tab bar visibility based on full-view status
-            if (!isNewTabFullView) {
-                // Moving to a non-full-view tab, show the tab bar
-                this._setMainTabBarVisibility(true);
-            } else if (!wasOldTabFullView) {
-                // Moving to full-view tab, hide the tab bar
-                this._setMainTabBarVisibility(false);
-            }
+            this._setMainTabBarVisibility(this._shouldShowTabBarForTab(this._activeTabName));
 
             // Reconnect signals for the new tab actor
             oldActor?.destroy();
@@ -409,7 +520,7 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
                 }
                 if (GObject.signal_lookup('navigate-to-main-tab', newContentActor.constructor.$gtype)) {
                     this._currentTabNavigateSignalId = newContentActor.connect('navigate-to-main-tab', (actor, targetTabName) => {
-                        if (this.TAB_NAMES.includes(targetTabName)) {
+                        if (this._isTabEnabled(targetTabName)) {
                             this._selectTab(targetTabName);
                         }
                     });
@@ -434,7 +545,7 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
             }
 
             oldActor?.destroy();
-            this._setMainTabBarVisibility(true);
+            this._setMainTabBarVisibility(this._shouldShowTabBarForTab(this._activeTabName));
 
             if (this._tabContentArea && this._activeTabName === tabName) {
                 const errorLabel = new St.Label({
@@ -558,12 +669,15 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
         this._currentTabActor?.destroy();
         this._currentTabActor = null;
 
-        if (this._gifProviderSignalId && this._settings) {
-            this._settings.disconnect(this._gifProviderSignalId);
-            this._gifProviderSignalId = 0;
+        if (this._settings && Array.isArray(this._tabSettingsSignalIds)) {
+            this._tabSettingsSignalIds.forEach(signalId => {
+                if (signalId > 0) {
+                    this._settings.disconnect(signalId);
+                }
+            });
+            this._tabSettingsSignalIds = [];
         }
 
-        this._gifTabButton = null;
         this._tabButtons = null;
         this._mainTabBar = null;
         this._tabContentArea = null;
@@ -772,7 +886,7 @@ export default class AllInOneClipboardExtension extends Extension {
 
         Object.entries(tabMap).forEach(([shortcutKey, tabName]) => {
             this._addKeybinding(shortcutKey, async () => {
-                if (tabName === _("GIF") && this._settings.get_string('gif-provider') === 'none') {
+                if (!this._indicator?.isTabEnabled(tabName)) {
                     return;
                 }
 
