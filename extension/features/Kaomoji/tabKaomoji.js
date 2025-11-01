@@ -12,16 +12,8 @@ import { AutoPaster, getAutoPaster } from '../../utilities/utilityAutoPaste.js';
  *
  * This class acts as a controller that configures and manages a
  * `CategorizedItemViewer` component to display and interact with kaomojis.
- *
- * @fires set-main-tab-bar-visibility - Requests to show or hide the main tab bar.
- * @fires navigate-to-main-tab - Requests a navigation to a different main tab.
  */
-export const KaomojiTabContent = GObject.registerClass({
-    Signals: {
-        'set-main-tab-bar-visibility': { param_types: [GObject.TYPE_BOOLEAN] },
-        'navigate-to-main-tab': { param_types: [GObject.TYPE_STRING] }
-    },
-},
+export const KaomojiTabContent = GObject.registerClass(
 class KaomojiTabContent extends St.Bin {
     constructor(extension, settings) {
         super({
@@ -52,6 +44,7 @@ class KaomojiTabContent extends St.Bin {
             searchFilterFn: this._searchFilter.bind(this),
             renderGridItemFn: this._renderGridItem.bind(this),
             renderCategoryButtonFn: this._renderCategoryButton.bind(this),
+            showBackButton: false
         };
 
         this._viewer = new CategorizedItemViewer(extension, settings, config);
@@ -62,9 +55,6 @@ class KaomojiTabContent extends St.Bin {
             this._onItemSelected(jsonPayload, extension);
         });
 
-        this._viewer.connect('back-requested', () => {
-            this.emit('navigate-to-main-tab', _("Recently Used"));
-        });
     }
 
     // =====================================================================
@@ -179,7 +169,6 @@ class KaomojiTabContent extends St.Bin {
      * Called by the parent when this tab is selected.
      */
     onTabSelected() {
-        this.emit('set-main-tab-bar-visibility', false);
         this._viewer?.onSelected();
     }
 

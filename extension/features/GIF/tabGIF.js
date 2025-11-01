@@ -32,16 +32,8 @@ const ITEMS_PER_ROW = 4;
  * - Viewing trending GIFs
  * - Recent GIFs history
  * - Infinite scroll pagination
- *
- * @fires set-main-tab-bar-visibility - Emitted to show/hide the main tab bar
- * @fires navigate-to-main-tab - Emitted to navigate back to a main tab
  */
-export const GIFTabContent = GObject.registerClass({
-    Signals: {
-        'set-main-tab-bar-visibility': { param_types: [GObject.TYPE_BOOLEAN] },
-        'navigate-to-main-tab': { param_types: [GObject.TYPE_STRING] }
-    },
-},
+export const GIFTabContent = GObject.registerClass(
 class GIFTabContent extends St.BoxLayout {
     /**
      * Initialize the GIF tab content.
@@ -125,7 +117,7 @@ class GIFTabContent extends St.BoxLayout {
     }
 
     /**
-     * Build the header with back button and category tabs.
+     * Build the header with category tabs.
      *
      * @private
      */
@@ -136,21 +128,6 @@ class GIFTabContent extends St.BoxLayout {
         });
         fullHeader.connect('key-press-event', this._onHeaderKeyPress.bind(this));
         this.add_child(fullHeader);
-
-        const backButton = new St.Button({
-            style_class: 'aio-clipboard-back-button button',
-            child: new St.Icon({
-                icon_name: 'go-previous-symbolic',
-                style_class: 'popup-menu-icon'
-            }),
-            y_align: Clutter.ActorAlign.CENTER,
-            can_focus: true
-        });
-        backButton.connect('clicked', () => {
-            this.emit('navigate-to-main-tab', _("Recently Used"));
-        });
-        fullHeader.add_child(backButton);
-        this._headerFocusables.push(backButton);
 
         this.headerScrollView = new St.ScrollView({
             style_class: 'aio-clipboard-tab-scrollview',
@@ -315,7 +292,7 @@ class GIFTabContent extends St.BoxLayout {
     async _loadInitialData() {
         this.headerBox.destroy_all_children();
         this._tabButtons = {};
-        this._headerFocusables.splice(1);
+        this._headerFocusables.splice(0);
 
         const searchWidget = this._searchComponent.getWidget();
 
@@ -1372,8 +1349,6 @@ class GIFTabContent extends St.BoxLayout {
      * Reloads data if the provider has changed since last activation.
      */
     onTabSelected() {
-        this.emit('set-main-tab-bar-visibility', false);
-
         const currentProvider = this._settings.get_string(GIF_PROVIDER_KEY);
 
         if (this._provider !== currentProvider) {

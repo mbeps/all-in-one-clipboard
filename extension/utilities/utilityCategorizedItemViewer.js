@@ -27,6 +27,7 @@ const RECENTS_CUSTOM_ICON_FILENAME = 'utility-recents-symbolic.svg';
  * @property {Function} renderGridItemFn - A function `(itemData)` that returns an `St.Button` widget for a grid item.
  * @property {Function} renderCategoryButtonFn - A function `(categoryId, extensionPath)` that returns an `St.Button` for a category tab.
  * @property {Function} createSignalPayload - A function `(itemData)` that returns a simple object to be emitted in the 'item-selected' signal.
+ * @property {boolean} [showBackButton=true] - Whether to display the back button in the header.
  */
 
 /**
@@ -65,6 +66,7 @@ class CategorizedItemViewer extends St.BoxLayout {
         this._extension = extension;
         this._settings = settings;
         this._config = config;
+        this._showBackButton = config.showBackButton !== false;
 
         if (!this._validateConfig(config)) {
             this._renderErrorState(_("Component configuration is invalid. Check logs."));
@@ -130,21 +132,24 @@ class CategorizedItemViewer extends St.BoxLayout {
      * @private
      */
     _buildUI() {
-        // Header contains the back button and category tabs
+        // Header contains the category tabs (and an optional back button)
         this._header = new St.BoxLayout({
             style_class: 'internal-header',
             vertical: false,
             x_expand: true
         });
 
-        this._backButton = new St.Button({
-            style_class: 'aio-clipboard-back-button button',
-            child: new St.Icon({ icon_name: 'go-previous-symbolic', style_class: 'popup-menu-icon' }),
-            y_align: Clutter.ActorAlign.CENTER,
-            can_focus: true
-        });
-        this._backButton.connect('clicked', () => this.emit('back-requested'));
-        this._header.add_child(this._backButton);
+        this._backButton = null;
+        if (this._showBackButton) {
+            this._backButton = new St.Button({
+                style_class: 'aio-clipboard-back-button button',
+                child: new St.Icon({ icon_name: 'go-previous-symbolic', style_class: 'popup-menu-icon' }),
+                y_align: Clutter.ActorAlign.CENTER,
+                can_focus: true
+            });
+            this._backButton.connect('clicked', () => this.emit('back-requested'));
+            this._header.add_child(this._backButton);
+        }
 
         // This is the bar that will hold the buttons.
         this._categoryTabBar = new St.BoxLayout({});
@@ -181,7 +186,9 @@ class CategorizedItemViewer extends St.BoxLayout {
         this.add_child(this._header);
 
         // Connect key press events for keyboard navigation of the header
-        this._backButton.connect('key-press-event', this._onFocusRingKeyPress.bind(this));
+        if (this._backButton) {
+            this._backButton.connect('key-press-event', this._onFocusRingKeyPress.bind(this));
+        }
         this._categoryTabBar.connect('key-press-event', this._onFocusRingKeyPress.bind(this));
         this._categoryTabBar.set_reactive(true);
 
@@ -202,7 +209,7 @@ class CategorizedItemViewer extends St.BoxLayout {
     }
 
     /**
-     * Handles Left/Right arrow key presses for navigating between the back button and category tabs.
+     * Handles Left/Right arrow key presses for navigating the header controls.
      * @param {Clutter.Actor} actor - The actor that received the event.
      * @param {Clutter.Event} event - The key press event.
      * @returns {number} Clutter.EVENT_STOP or Clutter.EVENT_PROPAGATE.
@@ -216,6 +223,16 @@ class CategorizedItemViewer extends St.BoxLayout {
         const currentFocus = global.stage.get_key_focus();
         const firstTab = children[0];
         const lastTab = children[children.length - 1];
+
+        if (!this._showBackButton || !this._backButton) {
+            if (symbol === Clutter.KEY_Left && currentFocus === firstTab) {
+                return Clutter.EVENT_STOP;
+            }
+            if (symbol === Clutter.KEY_Right && currentFocus === lastTab) {
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        }
 
         if (symbol === Clutter.KEY_Left) {
             if (currentFocus === this._backButton) {

@@ -66,16 +66,6 @@ const TAB_DEFINITIONS = [
 ];
 
 /**
- * Tabs that function as "full-view" and should hide the main tab bar.
- */
-const FULL_VIEW_TAB_IDS = new Set([
-    'emoji',
-    'gif',
-    'kaomoji',
-    'symbols'
-]);
-
-/**
  * The main panel indicator and menu for the All-in-One Clipboard extension.
  * This class is responsible for building the main UI, managing the tab bar,
  * and dynamically loading the content for each selected tab.
@@ -97,13 +87,6 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
         this._tabDefinitions.forEach(definition => {
             this._tabDefinitionByTranslatedName.set(definition.translatedName, definition);
         });
-
-        // Create the translated list of full-view tabs now that gettext is initialized.
-        this._fullViewTabs = new Set(
-            this._tabDefinitions
-                .filter(definition => FULL_VIEW_TAB_IDS.has(definition.id))
-                .map(definition => definition.translatedName)
-        );
 
         this._tabButtons = {};
         this._activeTabName = null;
@@ -227,31 +210,14 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
 
     /**
      * Sets the visibility of the main tab bar.
-     * @param {boolean} isVisible - Whether the tab bar should be visible.
+     * Keeps the bar visible whenever more than one tab is enabled.
      * @private
      */
-    _setMainTabBarVisibility(isVisible) {
-        if (this._mainTabBar && this._mainTabBar.visible !== isVisible) {
-            this._mainTabBar.visible = isVisible;
+    _setMainTabBarVisibility() {
+        const shouldShow = this._hasMultipleTabs;
+        if (this._mainTabBar && this._mainTabBar.visible !== shouldShow) {
+            this._mainTabBar.visible = shouldShow;
         }
-    }
-
-    /**
-     * Determines if the tab bar should be visible for the given tab.
-     * @param {string|null} tabName - The translated tab name.
-     * @returns {boolean} Whether the tab bar should be shown.
-     * @private
-     */
-    _shouldShowTabBarForTab(tabName) {
-        if (!this._hasMultipleTabs) {
-            return false;
-        }
-
-        if (!tabName) {
-            return true;
-        }
-
-        return !this._fullViewTabs.has(tabName);
     }
 
     /**
@@ -356,7 +322,7 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
                 }
                 this._activeTabName = fallbackTab;
                 this._lastActiveTabName = fallbackTab;
-                this._setMainTabBarVisibility(this._shouldShowTabBarForTab(this._activeTabName));
+                this._setMainTabBarVisibility();
             }
         }
 
@@ -364,7 +330,7 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
             this._lastActiveTabName = enabledTabNames[0];
         }
 
-        this._setMainTabBarVisibility(this._shouldShowTabBarForTab(this._activeTabName));
+        this._setMainTabBarVisibility();
     }
 
     /**
@@ -428,10 +394,9 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
         this._activeTabName = tabName;
         this._lastActiveTabName = tabName;
         const tabId = getTabIdentifier(tabName);
-        const shouldShowTabBar = this._shouldShowTabBarForTab(tabName);
 
         // Visibility Management
-        this._setMainTabBarVisibility(shouldShowTabBar);
+        this._setMainTabBarVisibility();
 
         // Asynchronous Content Loading
         if (this._loadingIndicatorTimeoutId) {
@@ -505,7 +470,7 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
             this._tabContentArea.set_child(newContentActor);
 
             // Adjust tab bar visibility based on full-view status
-            this._setMainTabBarVisibility(this._shouldShowTabBarForTab(this._activeTabName));
+            this._setMainTabBarVisibility();
 
             // Reconnect signals for the new tab actor
             oldActor?.destroy();
@@ -515,13 +480,20 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
             if (newContentActor.constructor.$gtype) {
                 if (GObject.signal_lookup('set-main-tab-bar-visibility', newContentActor.constructor.$gtype)) {
                     this._currentTabVisibilitySignalId = newContentActor.connect('set-main-tab-bar-visibility', (actor, isVisible) => {
-                        this._setMainTabBarVisibility(isVisible);
+                        this._setMainTabBarVisibility();
                     });
                 }
                 if (GObject.signal_lookup('navigate-to-main-tab', newContentActor.constructor.$gtype)) {
                     this._currentTabNavigateSignalId = newContentActor.connect('navigate-to-main-tab', (actor, targetTabName) => {
-                        if (this._isTabEnabled(targetTabName)) {
-                            this._selectTab(targetTabName);
+                        let resolvedTarget = targetTabName;
+                        const enabledTabNames = this._getEnabledTabNames();
+
+                        if (!resolvedTarget || !this._isTabEnabled(resolvedTarget)) {
+                            resolvedTarget = enabledTabNames.find(name => name !== this._activeTabName) ?? enabledTabNames[0];
+                        }
+
+                        if (resolvedTarget && resolvedTarget !== this._activeTabName && this._isTabEnabled(resolvedTarget)) {
+                            this._selectTab(resolvedTarget);
                         }
                     });
                 }
@@ -545,7 +517,7 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
             }
 
             oldActor?.destroy();
-            this._setMainTabBarVisibility(this._shouldShowTabBarForTab(this._activeTabName));
+            this._setMainTabBarVisibility();
 
             if (this._tabContentArea && this._activeTabName === tabName) {
                 const errorLabel = new St.Label({
