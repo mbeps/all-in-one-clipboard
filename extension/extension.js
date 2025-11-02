@@ -24,25 +24,46 @@ function getTabIdentifier(tabName) {
 }
 
 /**
- * Maps main tab names to their corresponding icon filenames.
+ * A single, declarative configuration for all main tabs.
+ * This is the single source of truth for tab properties.
  */
-const MAIN_TAB_ICONS_MAP = {
-    "Recently Used": 'utility-recents-symbolic.svg',
-    "Emoji": 'main-emoji-symbolic.svg',
-    "GIF": 'main-gif-symbolic.svg',
-    "Kaomoji": 'main-kaomoji-symbolic.svg',
-    "Symbols": 'main-symbols-symbolic.svg',
-    "Clipboard": 'main-clipboard-symbolic.svg'
-};
-
-/**
- * Tabs that function as "full-view" and should hide the main tab bar.
- */
-const FULL_VIEW_TABS = [
-    "Emoji",
-    "GIF",
-    "Kaomoji",
-    "Symbols"
+const TABS = [
+    {
+        name: "Recently Used",
+        icon: 'utility-recents-symbolic.svg',
+        isFullView: false,
+        settingKey: null
+    },
+    {
+        name: "Emoji",
+        icon: 'main-emoji-symbolic.svg',
+        isFullView: true,
+        settingKey: 'enable-emoji-tab'
+    },
+    {
+        name: "GIF",
+        icon: 'main-gif-symbolic.svg',
+        isFullView: true,
+        settingKey: 'enable-gif-tab'
+    },
+    {
+        name: "Kaomoji",
+        icon: 'main-kaomoji-symbolic.svg',
+        isFullView: true,
+        settingKey: 'enable-kaomoji-tab'
+    },
+    {
+        name: "Symbols",
+        icon: 'main-symbols-symbolic.svg',
+        isFullView: true,
+        settingKey: 'enable-symbols-tab'
+    },
+    {
+        name: "Clipboard",
+        icon: 'main-clipboard-symbolic.svg',
+        isFullView: false,
+        settingKey: 'enable-clipboard-tab'
+    },
 ];
 
 /**
@@ -52,15 +73,16 @@ const FULL_VIEW_TABS = [
  */
 const AllInOneClipboardIndicator = GObject.registerClass(
 class AllInOneClipboardIndicator extends PanelMenu.Button {
-        constructor(settings, extension, clipboardManager) {
+    constructor(settings, extension, clipboardManager) {
         super(0.5, _("All-in-One Clipboard"), false);
 
         this._settings = settings;
         this._extension = extension;
         this._clipboardManager = clipboardManager;
 
-        // Create the translated list of full-view tabs now that gettext is initialized.
-        this._fullViewTabs = FULL_VIEW_TABS.map(tab => _(tab));
+        // Generate tab properties from the single TABS constant.
+        this.TAB_NAMES = TABS.map(t => _(t.name));
+        this._fullViewTabs = TABS.filter(t => t.isFullView).map(t => _(t.name));
 
         this._tabButtons = {};
         this._activeTabName = null;
@@ -75,20 +97,27 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
         this._currentTabNavigateSignalId = 0;
         this._selectTabTimeoutId = 0;
         this._loadingIndicatorTimeoutId = 0;
-
-        this.TAB_NAMES = [
-            _("Recently Used"),
-            _("Emoji"),
-            _("GIF"),
-            _("Kaomoji"),
-            _("Symbols"),
-            _("Clipboard")
-        ];
+        this._tabVisibilitySignalIds = [];
 
         const icon = new St.Icon({ icon_name: 'edit-copy-symbolic', style_class: 'system-status-icon' });
         this.add_child(icon);
 
         this._buildMenu();
+
+        // Connect signals for tab management.
+        TABS.forEach(tab => {
+            if (tab.settingKey) {
+                const signalId = this._settings.connect(`changed::${tab.settingKey}`, () => this._updateTabsVisibility());
+                this._tabVisibilitySignalIds.push(signalId);
+            }
+        });
+
+        // Listen for changes to the tab order and rebuild the tab bar in real-time.
+        const tabOrderSignalId = this._settings.connect('changed::tab-order', () => this._rebuildTabBar());
+        this._tabVisibilitySignalIds.push(tabOrderSignalId);
+
+        // Run once on startup to set the initial state.
+        this._updateTabsVisibility();
     }
 
     /**
@@ -118,27 +147,8 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
         });
         mainVerticalBox.add_child(this._tabContentArea);
 
-        // Build tab buttons with themed icons
-        this.TAB_NAMES.forEach(name => {
-            const translatedName = _(name);
-            const iconFile = MAIN_TAB_ICONS_MAP[translatedName];
-
-            // Use the helper function to create themed icon
-            const iconWidget = createThemedIcon(this._extension.path, iconFile, 16);
-
-            const button = new St.Button({
-                style_class: 'aio-clipboard-tab-button button',
-                can_focus: true,
-                child: iconWidget,
-                x_expand: true,
-            });
-
-            button.tooltip_text = translatedName;
-
-            button.connect('clicked', () => this._selectTab(name));
-            this._tabButtons[name] = button;
-            this._mainTabBar.add_child(button);
-        });
+        // Rebuild the tab bar based on current settings
+        this._rebuildTabBar();
 
         this._mainTabBar.set_reactive(true);
         this._mainTabBar.connect('key-press-event', this._onMainTabBarKeyPress.bind(this));
@@ -154,15 +164,39 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
 
                 // Otherwise, this is a general open (e.g., panel click), so run default logic.
                 const rememberLastTab = this._settings.get_boolean('remember-last-tab');
-                const targetTab = (rememberLastTab && this._lastActiveTabName)
-                    ? this._lastActiveTabName
-                    : this.TAB_NAMES[0];
+                let targetTab = null;
 
-                // If an explicit tab target was set (e.g., by a specific-tab shortcut), use that.
+                // Remember last used tab if enabled and visible.
+                if (rememberLastTab && this._lastActiveTabName && this._tabButtons[this._lastActiveTabName]?.visible) {
+                    targetTab = this._lastActiveTabName;
+                }
+
+                // Use the user's default tab if visible.
+                if (!targetTab) {
+                    const userDefault = this._settings.get_string('default-tab');
+                    const translatedDefault = _(userDefault);
+                    if (this._tabButtons[translatedDefault]?.visible) {
+                        targetTab = translatedDefault;
+                    }
+                }
+
+                // As a final fallback, use the first visible tab in the user's order.
+                if (!targetTab) {
+                    const tabOrder = this._settings.get_strv('tab-order');
+                    for (const name of tabOrder) {
+                        const translated = _(name);
+                        if (this._tabButtons[translated]?.visible) {
+                            targetTab = translated;
+                            break;
+                        }
+                    }
+                }
+
                 GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
-                    if (this.menu.isOpen) {
+                    if (this.menu.isOpen && targetTab) {
                         this._selectTab(targetTab);
                     }
+                    // If no tabs are visible, it will just open empty.
                     return GLib.SOURCE_REMOVE;
                 });
 
@@ -173,6 +207,45 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
     }
 
     /**
+     * Clears and rebuilds the main tab bar based on the current 'tab-order' setting.
+     * This is called when the tab order changes in real-time.
+     * @private
+     */
+    _rebuildTabBar() {
+        // Clear all existing buttons and references
+        this._mainTabBar.destroy_all_children();
+        this._tabButtons = {};
+
+        const tabOrder = this._settings.get_strv('tab-order');
+
+        tabOrder.forEach(name => {
+            const translatedName = _(name);
+            const tabConfig = TABS.find(t => t.name === name);
+            if (!tabConfig) return;
+
+            const iconFile = tabConfig.icon;
+
+            const iconWidget = createThemedIcon(this._extension.path, iconFile, 16);
+
+            const button = new St.Button({
+                style_class: 'aio-clipboard-tab-button button',
+                can_focus: true,
+                child: iconWidget,
+                x_expand: true,
+            });
+
+            button.tooltip_text = translatedName;
+
+            button.connect('clicked', () => this._selectTab(translatedName));
+            this._tabButtons[translatedName] = button;
+            this._mainTabBar.add_child(button);
+        });
+
+        // After rebuilding, we must re-apply the visibility rules.
+        this._updateTabsVisibility();
+    }
+
+    /**
      * Sets the visibility of the main tab bar.
      * @param {boolean} isVisible - Whether the tab bar should be visible.
      * @private
@@ -180,6 +253,51 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
     _setMainTabBarVisibility(isVisible) {
         if (this._mainTabBar && this._mainTabBar.visible !== isVisible) {
             this._mainTabBar.visible = isVisible;
+        }
+    }
+
+    /**
+     * Updates the visibility and interactivity of all main tabs based on user settings.
+     * @private
+     */
+    _updateTabsVisibility() {
+        const visibleTabs = new Set();
+
+        // Iterate through all buttons in the tab bar to respect user order.
+        this._mainTabBar.get_children().forEach(button => {
+            // Find the translated name associated with this button widget
+            const name = Object.keys(this._tabButtons).find(key => this._tabButtons[key] === button);
+            if (!name) return;
+
+            // Find the original, non-translated name to look up its config
+            const originalName = TABS.find(t => _(t.name) === name)?.name;
+            const config = TABS.find(t => t.name === originalName);
+            if (!config) return;
+
+            // Determine visibility based on the associated setting key
+            const isVisible = config.settingKey ? this._settings.get_boolean(config.settingKey) : true;
+
+            button.visible = isVisible;
+            button.reactive = isVisible;
+            button.can_focus = isVisible;
+
+            if (isVisible) {
+                visibleTabs.add(name);
+            }
+        });
+
+        // Edge case: If the currently active or last-active tab was just hidden,
+        // reset it to a safe fallback to prevent errors.
+        const safeFallback = _("Recently Used");
+        if (this._activeTabName && !visibleTabs.has(this._activeTabName)) {
+            if (this.menu?.isOpen) {
+                this._selectTab(safeFallback);
+            } else {
+                this._activeTabName = safeFallback;
+            }
+        }
+        if (this._lastActiveTabName && !visibleTabs.has(this._lastActiveTabName)) {
+            this._lastActiveTabName = safeFallback;
         }
     }
 
@@ -485,6 +603,13 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
         this._currentTabActor?.destroy();
         this._currentTabActor = null;
 
+        this._tabVisibilitySignalIds.forEach(id => {
+            if (this._settings) {
+                this._settings.disconnect(id);
+            }
+        });
+        this._tabVisibilitySignalIds = [];
+
         this._tabButtons = null;
         this._mainTabBar = null;
         this._tabContentArea = null;
@@ -693,6 +818,12 @@ export default class AllInOneClipboardExtension extends Extension {
 
         Object.entries(tabMap).forEach(([shortcutKey, tabName]) => {
             this._addKeybinding(shortcutKey, async () => {
+                // If the button for this tab is not visible, do nothing.
+                const button = this._indicator._tabButtons[tabName];
+                if (!button || !button.visible) {
+                    return;
+                }
+
                 if (this._indicator.menu.isOpen) {
                     // If the menu is already open, just switch tabs.
                     await this._indicator._selectTab(tabName);

@@ -18,6 +18,38 @@
             <description>Determines where the menu appears when opened via shortcut while the panel icon is hidden. Can be 'cursor', 'center', or 'window'.</description>
         </key>
 
+        <!-- Tab Management -->
+        <key name="tab-order" type="as">
+            <default><![CDATA[['Recently Used', 'Emoji', 'GIF', 'Kaomoji', 'Symbols', 'Clipboard']]]></default>
+            <summary>The display order of the main tabs.</summary>
+            <description>Stores the user-defined order for tabs in the main tab bar.</description>
+        </key>
+        <key name="default-tab" type="s">
+            <default>'Recently Used'</default>
+            <summary>The tab to open by default.</summary>
+            <description>Defines which tab is opened when the menu is activated via the panel icon or main toggle shortcut.</description>
+        </key>
+        <key name="enable-emoji-tab" type="b">
+            <default>true</default>
+            <summary>Enable the 'Emoji' tab</summary>
+        </key>
+        <key name="enable-gif-tab" type="b">
+            <default>true</default>
+            <summary>Enable the 'GIF' tab</summary>
+        </key>
+        <key name="enable-kaomoji-tab" type="b">
+            <default>true</default>
+            <summary>Enable the 'Kaomoji' tab</summary>
+        </key>
+        <key name="enable-symbols-tab" type="b">
+            <default>true</default>
+            <summary>Enable the 'Symbols' tab</summary>
+        </key>
+        <key name="enable-clipboard-tab" type="b">
+            <default>true</default>
+            <summary>Enable the 'Clipboard' tab</summary>
+        </key>
+
         <!-- Keyboard Shortcuts -->
         <key name="shortcut-toggle-main" type="as">
             <default>[]</default>

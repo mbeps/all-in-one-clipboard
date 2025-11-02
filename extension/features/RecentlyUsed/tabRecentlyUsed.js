@@ -404,15 +404,30 @@ class RecentlyUsedTabContent extends St.BoxLayout {
      */
     _renderListSection(id) {
         const sectionData = this._sections[id];
+        const settingKeyMap = {
+            'kaomoji': 'enable-kaomoji-tab',
+            'clipboard': 'enable-clipboard-tab',
+        };
+
+        // If the corresponding tab for this section is disabled in preferences, hide the section.
+        const settingKey = settingKeyMap[id];
+        if (settingKey && !this._settings.get_boolean(settingKey)) {
+            sectionData.section.hide();
+            return;
+        }
+
+        // Get the data for this section
         const items = (id === 'kaomoji')
             ? this._recentManagers.kaomoji.getRecents().slice(0, 5)
             : this._clipboardManager.getHistoryItems().slice(0, 5);
 
+        // If there are no items to show, hide the section.
         if (items.length === 0) {
             sectionData.section.hide();
             return;
         }
 
+        // If both rules pass, show and build the section.
         sectionData.section.show();
         this._focusGrid.push([sectionData.showAllBtn]);
 
@@ -439,16 +454,31 @@ class RecentlyUsedTabContent extends St.BoxLayout {
     _renderGridSection(id) {
         const sectionData = this._sections[id];
         const manager = this._recentManagers[id];
+        const settingKeyMap = {
+            'emoji': 'enable-emoji-tab',
+            'gif': 'enable-gif-tab',
+            'symbols': 'enable-symbols-tab',
+        };
+
+        // If the corresponding tab for this section is disabled in preferences, hide the section.
+        const settingKey = settingKeyMap[id];
+        if (settingKey && !this._settings.get_boolean(settingKey)) {
+            sectionData.section.hide();
+            return;
+        }
 
         if (!manager) return;
 
+        // Get the data for this section
         const items = manager.getRecents().slice(0, 5);
 
+        // If there are no items to show, hide the section.
         if (items.length === 0) {
             sectionData.section.hide();
             return;
         }
 
+        // If both rules pass, show and build the section.
         sectionData.section.show();
         this._focusGrid.push([sectionData.showAllBtn]);
 
