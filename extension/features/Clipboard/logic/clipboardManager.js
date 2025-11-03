@@ -371,11 +371,6 @@ class ClipboardManager extends GObject.Object {
     // Data Management Methods
     // ===========================
 
-    /**
-     * Load clipboard history and pinned items from disk
-     *
-     * @returns {Promise<boolean>} Success status
-     */
     async loadData() {
         /**
          * Helper function to load a file asynchronously
@@ -392,19 +387,22 @@ class ClipboardManager extends GObject.Object {
                             resolve(ok ? contents : null);
                         } catch (e) {
                             if (e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND)) {
-                                resolve(null);
+                                resolve(null); // Not an error, just an empty file
                             } else {
-                                reject(e);
+                                reject(e); // A real error
                             }
                         }
                     });
                 });
                 return bytes;
             } catch (e) {
+                // Return null on error so we can handle it gracefully below
+                console.warn(`[AIO-Clipboard] Could not load file ${file.get_path()}: ${e.message}`);
                 return null;
             }
         };
 
+        // Load history data
         try {
             const historyBytes = await loadFile(this._historyFile);
             const pinnedBytes = await loadFile(this._pinnedFile);
@@ -412,20 +410,28 @@ class ClipboardManager extends GObject.Object {
             this._history = historyBytes
                 ? JSON.parse(new TextDecoder().decode(historyBytes))
                 : [];
+        } catch (e) {
+            console.error(`[AIO-Clipboard] Failed to parse history_clipboard.json. History will be empty. Error: ${e.message}`);
+            this._history = []; // Default to empty on parse failure
+        }
+
+        // Load pinned data
+        try {
+            const pinnedBytes = await loadFile(this._pinnedFile);
             this._pinned = pinnedBytes
                 ? JSON.parse(new TextDecoder().decode(pinnedBytes))
                 : [];
-
-            this.emit('history-changed');
-            this.emit('pinned-list-changed');
-            return true;
         } catch (e) {
-            this._history = [];
-            this._pinned = [];
-            this.emit('history-changed');
-            this.emit('pinned-list-changed');
-            return false;
+            console.error(`[AIO-Clipboard] Failed to parse pinned_clipboard.json. Pinned items will be empty. Error: ${e.message}`);
+            this._pinned = []; // Default to empty on parse failure
         }
+
+        // Emit signals to update the UI with whatever data was successfully loaded.
+        this.emit('history-changed');
+        this.emit('pinned-list-changed');
+
+        // Load is always successful, resulting in a stable state for safe garbage collection.
+        return true;
     }
 
     /**
