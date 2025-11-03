@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-11-02 22:07+0000\n"
+"POT-Creation-Date: 2025-11-03 16:22+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -601,38 +601,38 @@ msgstr ""
 msgid "Online search is disabled."
 msgstr ""
 
-#: extension/features/GIF/tabGIF.js:373 extension/features/GIF/tabGIF.js:437
-#: extension/features/GIF/tabGIF.js:454
+#: extension/features/GIF/tabGIF.js:387 extension/features/GIF/tabGIF.js:451
+#: extension/features/GIF/tabGIF.js:468
 #: extension/utilities/utilityCategorizedItemViewer.js:491
 msgid "Recents"
 msgstr ""
 
-#: extension/features/GIF/tabGIF.js:421
+#: extension/features/GIF/tabGIF.js:435
 msgid "No categories available."
 msgstr ""
 
-#: extension/features/GIF/tabGIF.js:471 extension/features/GIF/tabGIF.js:478
+#: extension/features/GIF/tabGIF.js:485 extension/features/GIF/tabGIF.js:492
 msgid "Trending"
 msgstr ""
 
-#: extension/features/GIF/tabGIF.js:481
+#: extension/features/GIF/tabGIF.js:495
 msgid "Trending GIFs"
 msgstr ""
 
-#: extension/features/GIF/tabGIF.js:893
+#: extension/features/GIF/tabGIF.js:735
 msgid "No recent GIFs."
 msgstr ""
 
-#: extension/features/GIF/tabGIF.js:917
+#: extension/features/GIF/tabGIF.js:759
 msgid "No trending GIFs found."
 msgstr ""
 
-#: extension/features/GIF/tabGIF.js:950
+#: extension/features/GIF/tabGIF.js:792
 #, javascript-format
 msgid "No results found for '%s'."
 msgstr ""
 
-#: extension/features/GIF/tabGIF.js:1306
+#: extension/features/GIF/tabGIF.js:1148
 #, javascript-format
 msgid ""
 "Error: %s\n"
