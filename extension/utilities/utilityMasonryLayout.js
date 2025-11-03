@@ -4,10 +4,10 @@ import GObject from 'gi://GObject';
 import St from 'gi://St';
 
 /**
- * MasonryLayout - A Pinterest-style masonry layout widget for displaying items in columns.
+ * MasonryLayout - A self-navigating, Pinterest-style masonry layout widget.
  *
  * Items are distributed across columns with the shortest column always receiving the next item.
- * Automatically re-layouts when the widget width changes.
+ * Automatically re-layouts when width changes and handles its own keyboard navigation.
  *
  * @example
  * const masonry = new MasonryLayout({
@@ -31,7 +31,8 @@ class MasonryLayout extends St.Widget {
     constructor(params) {
         super({
             layout_manager: new Clutter.BinLayout(),
-            x_expand: true
+            x_expand: true,
+            reactive: true, // Make the layout listen for events
         });
 
         const { columns = 4, spacing = 2, renderItemFn } = params;
@@ -43,6 +44,10 @@ class MasonryLayout extends St.Widget {
         this._items = [];
         this._pendingAllocationId = null;
         this._pendingTimeoutId = null;
+
+        // Properties for keyboard navigation
+        this._spatialMap = [];
+        this.connect('key-press-event', this._onKeyPress.bind(this));
     }
 
     /**
@@ -71,6 +76,9 @@ class MasonryLayout extends St.Widget {
         this._columnHeights = new Array(this._columns).fill(0);
         this._items = [];
         this.height = 0;
+
+        // Clear navigation map
+        this._spatialMap = [];
     }
 
     /**
@@ -97,12 +105,217 @@ class MasonryLayout extends St.Widget {
 
         this._renderItems(items, columnWidth, renderSession);
         this._updateContainerHeight();
+
+        // Build the spatial map after rendering is complete
+        this._buildSpatialMap();
     }
 
     /**
-     * Check if the current width is valid for rendering.
-     *
-     * @returns {boolean} True if width is valid
+     * Builds a cache of item positions for fast keyboard navigation.
+     * @private
+     */
+    _buildSpatialMap() {
+        const widgets = this.get_children();
+        if (widgets.length === 0) {
+            this._spatialMap = [];
+            return;
+        }
+
+        let minY = Infinity, minX = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+        // Build the map and find the overall boundaries of the grid.
+        const mapData = widgets.map(widget => {
+            const box = widget.get_allocation_box();
+            if (box.y1 < minY) minY = box.y1;
+            if (box.x1 < minX) minX = box.x1;
+            if (box.x2 > maxX) maxX = box.x2;
+            if (box.y2 > maxY) maxY = box.y2;
+            return {
+                widget,
+                centerX: box.x1 + box.get_width() / 2,
+                centerY: box.y1 + box.get_height() / 2,
+                y1: box.y1,
+                x1: box.x1,
+                x2: box.x2,
+                y2: box.y2,
+            };
+        });
+
+        const tolerance = 2; // Pixel tolerance for edge detection
+
+        // Determine if each item is on an edge.
+        this._spatialMap = mapData.map(item => ({
+            ...item,
+            isTopEdge: item.y1 <= minY + tolerance,
+            isBottomEdge: item.y2 >= maxY - tolerance,
+            isLeftEdge: item.x1 <= minX + tolerance,
+            isRightEdge: item.x2 >= maxX - tolerance,
+        }));
+    }
+
+    /**
+     * Handles key press events for navigating the grid.
+     * @param {Clutter.Actor} actor - The actor that received the event.
+     * @param {Clutter.Event} event - The key press event.
+     * @returns {number} Clutter.EVENT_STOP or Clutter.EVENT_PROPAGATE.
+     * @private
+     */
+    _onKeyPress(actor, event) {
+        const symbol = event.get_key_symbol();
+        const direction = this._getDirectionFromKey(symbol);
+
+        if (!direction) {
+            return Clutter.EVENT_PROPAGATE;
+        }
+
+        const currentFocus = global.stage.get_key_focus();
+        const currentItem = this._spatialMap.find(item => item.widget === currentFocus);
+
+        if (!currentItem) {
+            return Clutter.EVENT_PROPAGATE; // Focus is not within this layout
+        }
+
+        // Check if we are already at a boundary for the desired direction.
+        if ((direction === 'up' && currentItem.isTopEdge) ||
+            (direction === 'left' && currentItem.isLeftEdge) ||
+            (direction === 'right' && currentItem.isRightEdge) ||
+            (direction === 'down' && currentItem.isBottomEdge)) {
+
+            // If we are at the top boundary, stop the event and return.
+            return direction === 'up' ? Clutter.EVENT_PROPAGATE : Clutter.EVENT_STOP;
+        }
+
+        // If we are not at a boundary, find the next widget within the grid.
+        const nextWidget = this._findClosestInDirection(currentFocus, direction);
+        if (nextWidget) {
+            nextWidget.grab_key_focus();
+        }
+
+        // Stop further propagation of the event.
+        return Clutter.EVENT_STOP;
+    }
+
+    /**
+     * Converts a keyboard symbol to a navigation direction.
+     * @param {number} symbol - The key symbol.
+     * @returns {string|null} The direction string or null.
+     * @private
+     */
+    _getDirectionFromKey(symbol) {
+        switch (symbol) {
+            case Clutter.KEY_Up: return 'up';
+            case Clutter.KEY_Down: return 'down';
+            case Clutter.KEY_Left: return 'left';
+            case Clutter.KEY_Right: return 'right';
+            default: return null;
+        }
+    }
+
+    /**
+     * Finds the most logical next widget in a given direction.
+     * @param {St.Widget} currentWidget - The currently focused widget.
+     * @param {string} direction - 'up', 'down', 'left', or 'right'.
+     * @returns {St.Widget|null} The next widget to focus, or null.
+     * @private
+     */
+    _findClosestInDirection(currentWidget, direction) {
+        const currentItem = this._spatialMap.find(item => item.widget === currentWidget);
+        if (!currentItem) return null;
+
+        let bestCandidate = null;
+
+        // Different logic for horizontal vs vertical movement.
+        if (direction === 'left' || direction === 'right') {
+            // For horizontal movement, first find the next column.
+            const candidatesInDirection = this._spatialMap.filter(item => {
+                if (item.widget === currentWidget) return false;
+                return direction === 'right' ? item.centerX > currentItem.centerX : item.centerX < currentItem.centerX;
+            });
+
+            if (candidatesInDirection.length === 0) return null;
+
+            // Find the minimum horizontal distance to identify the next column.
+            let minHorizontalDistance = Infinity;
+            candidatesInDirection.forEach(item => {
+                const distance = Math.abs(item.centerX - currentItem.centerX);
+                if (distance < minHorizontalDistance) {
+                    minHorizontalDistance = distance;
+                }
+            });
+
+            // Filter to include only items in that next column, with a small tolerance.
+            const tolerance = 20; // Allow for slight variations in column centering.
+            const itemsInTargetColumn = candidatesInDirection.filter(item => {
+                const distance = Math.abs(item.centerX - currentItem.centerX);
+                return distance < minHorizontalDistance + tolerance;
+            });
+
+            // From these, select the one with the greatest vertical overlap.
+            let maxOverlap = -1;
+            for (const candidate of itemsInTargetColumn) {
+                const overlap = this._getVerticalOverlap(currentItem, candidate);
+                if (overlap > maxOverlap) {
+                    maxOverlap = overlap;
+                    bestCandidate = candidate;
+                }
+            }
+
+            // If for some reason there's no overlap, find the one with the closest vertical center.
+            if (!bestCandidate) {
+                 let minCenterYDistance = Infinity;
+                 for (const candidate of itemsInTargetColumn) {
+                    const distance = Math.abs(candidate.centerY - currentItem.centerY);
+                    if (distance < minCenterYDistance) {
+                        minCenterYDistance = distance;
+                        bestCandidate = candidate;
+                    }
+                 }
+            }
+
+        } else { // 'up' or 'down'
+            // For vertical movement, use a weighted distance metric.
+            const candidatesInDirection = this._spatialMap.filter(item => {
+                if (item.widget === currentWidget) return false;
+                return direction === 'up' ? item.centerY < currentItem.centerY : item.centerY > currentItem.centerY;
+            });
+
+            if (candidatesInDirection.length === 0) return null;
+
+            let minWeightedDistance = Infinity;
+            for (const candidate of candidatesInDirection) {
+                const dX = Math.abs(candidate.centerX - currentItem.centerX);
+                const dY = Math.abs(candidate.centerY - currentItem.centerY);
+                const weightedDistance = Math.sqrt(Math.pow(dX * 5, 2) + Math.pow(dY, 2));
+
+                if (weightedDistance < minWeightedDistance) {
+                    minWeightedDistance = weightedDistance;
+                    bestCandidate = candidate;
+                }
+            }
+        }
+
+        return bestCandidate ? bestCandidate.widget : null;
+    }
+
+    /**
+     * Calculates the vertical overlap in pixels between two items.
+     * @param {object} itemA - A spatial map object for the first item.
+     * @param {object} itemB - A spatial map object for the second item.
+     * @returns {number} The number of overlapping vertical pixels.
+     * @private
+     */
+    _getVerticalOverlap(itemA, itemB) {
+        // Find the top and bottom of the overlapping area
+        const overlapTop = Math.max(itemA.y1, itemB.y1);
+        const overlapBottom = Math.min(itemA.y2, itemB.y2);
+
+        // The overlap is the difference, but it can't be negative.
+        return Math.max(0, overlapBottom - overlapTop);
+    }
+
+    /**
+     * Checks if the current width is valid for rendering.
+     * @returns {boolean} True if width is valid, false otherwise.
      * @private
      */
     _isValidWidth() {

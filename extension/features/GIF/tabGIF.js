@@ -247,8 +247,6 @@ class GIFTabContent extends St.BoxLayout {
             renderItemFn: this._renderMasonryItem.bind(this),
             visible: true // Start visible
         });
-        this._masonryView.reactive = true;
-        this._masonryView.connect('key-press-event', this._onGridKeyPress.bind(this));
 
         // Create the Bin that will hold info/error messages
         this._infoBin = new St.Bin({
@@ -265,6 +263,22 @@ class GIFTabContent extends St.BoxLayout {
         this._scrollableContainer.add_child(this._masonryView);
         this._scrollableContainer.add_child(this._infoBin);
 
+        // Handle key navigation from the grid to the search/header
+        this._scrollableContainer.reactive = true;
+        this._scrollableContainer.connect('key-press-event', (actor, event) => {
+            const symbol = event.get_key_symbol();
+            if (symbol === Clutter.KEY_Up) {
+                // This event propagated up, meaning we hit the grid's top edge.
+                const searchWidget = this._searchComponent?.getWidget();
+                if (searchWidget && searchWidget.visible) {
+                    this._searchComponent.grabFocus();
+                } else if (this._headerFocusables.length > 0) {
+                    this._headerFocusables[0].grab_key_focus();
+                }
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        });
         this.add_child(this._scrollView);
     }
 
@@ -608,178 +622,6 @@ class GIFTabContent extends St.BoxLayout {
         }
 
         return Clutter.EVENT_PROPAGATE;
-    }
-
-    /**
-     * Handle keyboard navigation in the GIF grid.
-     *
-     * @param {St.Widget} actor - The actor that received the event
-     * @param {Clutter.Event} event - The key press event
-     * @returns {number} Clutter.EVENT_STOP or Clutter.EVENT_PROPAGATE
-     * @private
-     */
-    _onGridKeyPress(actor, event) {
-        const symbol = event.get_key_symbol();
-
-        if (this._gridAllButtons.length === 0) {
-            return Clutter.EVENT_PROPAGATE;
-        }
-
-        const currentFocus = global.stage.get_key_focus();
-        const currentIndex = this._gridAllButtons.indexOf(currentFocus);
-
-        if (currentIndex === -1) {
-            return Clutter.EVENT_PROPAGATE;
-        }
-
-        let targetIndex = -1;
-
-        switch (symbol) {
-            case Clutter.KEY_Left:
-                targetIndex = this._findClosestInDirection(currentIndex, 'left');
-                break;
-
-            case Clutter.KEY_Right:
-                targetIndex = this._findClosestInDirection(currentIndex, 'right');
-                break;
-
-            case Clutter.KEY_Up:
-                targetIndex = this._findClosestInDirection(currentIndex, 'up');
-                if (targetIndex === -1) {
-                    this._focusElementAboveGrid();
-                    return Clutter.EVENT_STOP;
-                }
-                break;
-
-            case Clutter.KEY_Down:
-                targetIndex = this._findClosestInDirection(currentIndex, 'down');
-                break;
-
-            default:
-                return Clutter.EVENT_PROPAGATE;
-        }
-
-        if (targetIndex !== -1) {
-            this._gridAllButtons[targetIndex].grab_key_focus();
-        }
-
-        return Clutter.EVENT_STOP;
-    }
-
-    /**
-     * Focus the element above the grid (search bar or header).
-     *
-     * @private
-     */
-    _focusElementAboveGrid() {
-        const searchWidget = this._searchComponent?.getWidget();
-
-        if (searchWidget && searchWidget.visible) {
-            this._searchComponent.grabFocus();
-        } else if (this._headerFocusables.length > 0) {
-            this._headerFocusables[0].grab_key_focus();
-        }
-    }
-
-    /**
-     * Find the closest GIF button in a given direction from the current position.
-     *
-     * Uses weighted distance calculation to prefer items in the same row/column.
-     *
-     * @param {number} currentIndex - Index of the currently focused button
-     * @param {string} direction - Direction to search: 'up', 'down', 'left', 'right'
-     * @returns {number} Index of the closest button, or -1 if none found
-     * @private
-     */
-    _findClosestInDirection(currentIndex, direction) {
-        const currentButton = this._gridAllButtons[currentIndex];
-        const currentBox = currentButton.get_allocation_box();
-        const currentCenterX = currentBox.x1 + currentBox.get_width() / 2;
-        const currentCenterY = currentBox.y1 + currentBox.get_height() / 2;
-
-        let bestCandidateIndex = -1;
-        let minWeightedDistance = Infinity;
-
-        for (let i = 0; i < this._gridAllButtons.length; i++) {
-            if (i === currentIndex) {
-                continue;
-            }
-
-            const candidate = this._gridAllButtons[i];
-            const candidateBox = candidate.get_allocation_box();
-            const candidateCenterX = candidateBox.x1 + candidateBox.get_width() / 2;
-            const candidateCenterY = candidateBox.y1 + candidateBox.get_height() / 2;
-
-            if (!this._isInDirection(direction, currentCenterX, currentCenterY,
-                                     candidateCenterX, candidateCenterY)) {
-                continue;
-            }
-
-            const weightedDistance = this._calculateWeightedDistance(
-                direction,
-                currentCenterX,
-                currentCenterY,
-                candidateCenterX,
-                candidateCenterY
-            );
-
-            if (weightedDistance < minWeightedDistance) {
-                minWeightedDistance = weightedDistance;
-                bestCandidateIndex = i;
-            }
-        }
-
-        return bestCandidateIndex;
-    }
-
-    /**
-     * Check if a candidate is in the specified direction from the current position.
-     *
-     * @param {string} direction - The direction to check
-     * @param {number} currentX - Current X coordinate
-     * @param {number} currentY - Current Y coordinate
-     * @param {number} candidateX - Candidate X coordinate
-     * @param {number} candidateY - Candidate Y coordinate
-     * @returns {boolean} True if candidate is in the specified direction
-     * @private
-     */
-    _isInDirection(direction, currentX, currentY, candidateX, candidateY) {
-        switch (direction) {
-            case 'up':
-                return candidateY < currentY;
-            case 'down':
-                return candidateY > currentY;
-            case 'left':
-                return candidateX < currentX;
-            case 'right':
-                return candidateX > currentX;
-            default:
-                return false;
-        }
-    }
-
-    /**
-     * Calculate weighted distance for directional navigation.
-     *
-     * Weights favor items in the same row/column by penalizing perpendicular distance.
-     *
-     * @param {string} direction - The navigation direction
-     * @param {number} currentX - Current X coordinate
-     * @param {number} currentY - Current Y coordinate
-     * @param {number} candidateX - Candidate X coordinate
-     * @param {number} candidateY - Candidate Y coordinate
-     * @returns {number} Weighted distance
-     * @private
-     */
-    _calculateWeightedDistance(direction, currentX, currentY, candidateX, candidateY) {
-        const dX = Math.abs(candidateX - currentX);
-        const dY = Math.abs(candidateY - currentY);
-
-        if (direction === 'up' || direction === 'down') {
-            return Math.sqrt(Math.pow(dX * 5, 2) + Math.pow(dY, 2));
-        } else {
-            return Math.sqrt(Math.pow(dX, 2) + Math.pow(dY * 5, 2));
-        }
     }
 
     // ===========================
