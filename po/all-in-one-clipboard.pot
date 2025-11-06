@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-11-06 13:58+0000\n"
+"POT-Creation-Date: 2025-11-06 15:29+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -21,7 +21,7 @@ msgstr ""
 msgid "All-in-One Clipboard"
 msgstr ""
 
-#: extension/extension.js:291 extension/extension.js:397
+#: extension/extension.js:308 extension/extension.js:415
 #: extension/features/Emoji/tabEmoji.js:108
 #: extension/features/GIF/tabGIF.js:150
 #: extension/features/Kaomoji/tabKaomoji.js:66
@@ -29,34 +29,34 @@ msgstr ""
 msgid "Recently Used"
 msgstr ""
 
-#: extension/extension.js:380
+#: extension/extension.js:398
 #, javascript-format
 msgid "Loading %s..."
 msgstr ""
 
-#: extension/extension.js:410 extension/extension.js:812
+#: extension/extension.js:428 extension/extension.js:830
 #: extension/features/RecentlyUsed/tabRecentlyUsed.js:180
 #: extension/features/RecentlyUsed/tabRecentlyUsed.js:185
 msgid "Clipboard"
 msgstr ""
 
-#: extension/extension.js:813
+#: extension/extension.js:831
 #: extension/features/RecentlyUsed/tabRecentlyUsed.js:181
 msgid "Emoji"
 msgstr ""
 
-#: extension/extension.js:814
+#: extension/extension.js:832
 #: extension/features/RecentlyUsed/tabRecentlyUsed.js:182
 #: extension/features/RecentlyUsed/tabRecentlyUsed.js:645
 msgid "GIF"
 msgstr ""
 
-#: extension/extension.js:815
+#: extension/extension.js:833
 #: extension/features/RecentlyUsed/tabRecentlyUsed.js:183
 msgid "Kaomoji"
 msgstr ""
 
-#: extension/extension.js:816
+#: extension/extension.js:834
 #: extension/features/RecentlyUsed/tabRecentlyUsed.js:184
 msgid "Symbols"
 msgstr ""
