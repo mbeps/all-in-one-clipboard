@@ -806,9 +806,9 @@ class ClipboardTabContent extends St.Bin {
         if (itemData.type === 'text') {
             contentWidget = new St.Label({
                 text: itemData.preview || '',
-                y_align: Clutter.ActorAlign.CENTER,
                 style_class: 'clipboard-item-text-label',
-                x_expand: true
+                x_expand: true,
+                y_align: Clutter.ActorAlign.CENTER
             });
             contentWidget.get_clutter_text().set_line_wrap(false);
             contentWidget.get_clutter_text().set_ellipsize(Pango.EllipsizeMode.END);

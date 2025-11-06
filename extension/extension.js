@@ -257,6 +257,24 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
     }
 
     /**
+     * Updates the visual state of the tab buttons so the active tab is highlighted.
+     * @private
+     */
+    _updateTabButtonSelection() {
+        if (!this._tabButtons) {
+            return;
+        }
+
+        for (const [name, button] of Object.entries(this._tabButtons)) {
+            if (name === this._activeTabName) {
+                button.add_style_pseudo_class('checked');
+            } else {
+                button.remove_style_pseudo_class('checked');
+            }
+        }
+    }
+
+    /**
      * Updates the visibility and interactivity of all main tabs based on user settings.
      * @private
      */
@@ -286,8 +304,7 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
             }
         });
 
-        // Edge case: If the currently active or last-active tab was just hidden,
-        // reset it to a safe fallback to prevent errors.
+        // Ensure that the active and last active tabs are visible
         const safeFallback = _("Recently Used");
         if (this._activeTabName && !visibleTabs.has(this._activeTabName)) {
             if (this.menu?.isOpen) {
@@ -344,6 +361,7 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
         // Update state
         this._activeTabName = tabName;
         this._lastActiveTabName = tabName;
+        this._updateTabButtonSelection();
         const tabId = getTabIdentifier(tabName);
         const isNewTabFullView = this._fullViewTabs.includes(tabName);
 
