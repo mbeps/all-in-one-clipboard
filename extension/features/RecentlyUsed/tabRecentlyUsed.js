@@ -68,6 +68,24 @@ class RecentlyUsedTabContent extends St.BoxLayout {
         this._clipboardManager = clipboardManager;
         this._settingsBtnFocusTimeoutId = 0;
 
+        // Read the image size setting
+        this._imagePreviewSize = this._settings.get_int('clipboard-image-preview-size');
+
+        // Store recent managers for different feature types
+        this._recentManagers = {};
+
+        // Track connected signals for cleanup
+        this._signalIds = [];
+
+        // Tell it to listen, and add it to the list of things to clean up later.
+        this._signalIds.push({
+            obj: this._settings,
+            id: this._settings.connect('changed::clipboard-image-preview-size', () => {
+                this._imagePreviewSize = this._settings.get_int('clipboard-image-preview-size');
+                this._renderAll();
+            })
+        });
+
         // Store recent managers for different feature types
         this._recentManagers = {};
 
@@ -539,34 +557,49 @@ class RecentlyUsedTabContent extends St.BoxLayout {
         const box = new St.BoxLayout({
             x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
-            x_align: (isKaomoji || isImage) ? Clutter.ActorAlign.CENTER : Clutter.ActorAlign.FILL
+            x_align: (isKaomoji || isImage) ? Clutter.ActorAlign.CENTER : Clutter.ActorAlign.FILL,
         });
         box.spacing = 8;
         button.set_child(box);
 
         if (isKaomoji) {
-            const label = new St.Label({
+            box.add_child(new St.Label({
                 text: itemData.preview || '',
                 y_align: Clutter.ActorAlign.CENTER,
                 x_align: Clutter.ActorAlign.CENTER
-            });
-            box.add_child(label);
+            }));
         } else if (isImage) {
             const imagePath = GLib.build_filenamev([
                 this._clipboardManager._imagesDir,
                 itemData.image_filename
             ]);
-            const icon = new St.Icon({
-                gicon: new Gio.FileIcon({ file: Gio.File.new_for_path(imagePath) }),
-                icon_size: 32,
+
+            // Use wrapper bin for proper sizing
+            const imageWrapper = new St.Bin({
+                x_expand: true,
+                y_expand: true,
                 x_align: Clutter.ActorAlign.CENTER,
                 y_align: Clutter.ActorAlign.CENTER
             });
-            box.add_child(icon);
-        } else {
+
+            const icon = new St.Icon({
+                gicon: new Gio.FileIcon({ file: Gio.File.new_for_path(imagePath) }),
+                icon_size: this._imagePreviewSize
+            });
+
+            imageWrapper.set_style(`min-height: ${this._imagePreviewSize}px;`);
+            imageWrapper.set_child(icon);
+
+            // Add image class to button and set dynamic height
+            const minHeight = Math.max(this._imagePreviewSize);
+            button.set_style(`min-height: ${minHeight}px;`);
+            box.y_expand = true;
+            box.y_align = Clutter.ActorAlign.FILL;
+
+            box.add_child(imageWrapper);
+        } else { // It's a text item from the clipboard
             const label = new St.Label({
                 text: itemData.preview || '',
-                y_align: Clutter.ActorAlign.CENTER,
                 x_expand: true
             });
             label.get_clutter_text().set_line_wrap(false);
@@ -582,13 +615,14 @@ class RecentlyUsedTabContent extends St.BoxLayout {
         // Ensure button scrolls into view when focused
         button.connect('key-focus-in', () => {
             GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-                // Defensive check: Only run if the widget is part of the main UI tree.
+                // Only run if the widget is part of the main UI tree.
                 if (button.get_stage()) {
                     ensureActorVisibleInScrollView(this._scrollView, button);
                 }
                 return GLib.SOURCE_REMOVE;
             });
         });
+
         return button;
     }
 

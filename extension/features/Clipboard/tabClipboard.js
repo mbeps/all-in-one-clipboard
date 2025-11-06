@@ -43,6 +43,15 @@ class ClipboardTabContent extends St.Bin {
         this._settings = settings;
         this._manager = manager;
 
+        // Read the image size setting
+        this._imagePreviewSize = this._settings.get_int('clipboard-image-preview-size');
+
+        // Listen for changes to the setting
+        this._settingSignalId = this._settings.connect('changed::clipboard-image-preview-size', () => {
+            this._imagePreviewSize = this._settings.get_int('clipboard-image-preview-size');
+            this._redraw();
+        });
+
         // State management
         this._selectedIds = new Set();
         this._currentSearchText = "";
@@ -773,7 +782,7 @@ class ClipboardTabContent extends St.Bin {
         this._checkboxIconsMap.set(itemData.id, checkboxIcon);
 
         const itemCheckbox = new St.Button({
-            style_class: 'button clipboard-icon-button',
+            style_class: 'button clipboard-item-checkbox',
             child: checkboxIcon,
             can_focus: true,
             y_expand: false,
@@ -803,23 +812,40 @@ class ClipboardTabContent extends St.Bin {
             });
             contentWidget.get_clutter_text().set_line_wrap(false);
             contentWidget.get_clutter_text().set_ellipsize(Pango.EllipsizeMode.END);
-        } else {
+        } else { // This is an image
             const imagePath = GLib.build_filenamev([this._manager._imagesDir, itemData.image_filename]);
-            contentWidget = new St.Icon({
-                gicon: new Gio.FileIcon({ file: Gio.File.new_for_path(imagePath) }),
-                icon_size: 36,
-                style_class: 'clipboard-item-image-icon',
-                x_expand: true
+
+            // Use wrapper bin for proper sizing
+            const imageWrapper = new St.Bin({
+                x_expand: true,
+                y_expand: true,
+                x_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.CENTER
             });
+
+            const imageActor = new St.Icon({
+                gicon: new Gio.FileIcon({ file: Gio.File.new_for_path(imagePath) }),
+                icon_size: this._imagePreviewSize
+            });
+
+            imageWrapper.set_style(`min-height: ${this._imagePreviewSize}px;`);
+            imageWrapper.set_child(imageActor);
+
+            // Add image class to button and set dynamic height
+            const minHeight = Math.max(this._imagePreviewSize);
+            rowButton.set_style(`min-height: ${minHeight}px;`);
+            mainBox.y_expand = true;
+            mainBox.y_align = Clutter.ActorAlign.FILL;
+
+            contentWidget = imageWrapper;
         }
         mainBox.add_child(contentWidget);
 
-        // This button shows the STARRED STATE of the item in the row.
+        // This button shows the starred state of the item in the row.
         const rowStarButton = new St.Button({
             style_class: 'button clipboard-icon-button',
             child: new St.Icon({ icon_size: 16 }),
             can_focus: true,
-            y_expand: false,
             y_align: Clutter.ActorAlign.CENTER
         });
 
@@ -836,7 +862,6 @@ class ClipboardTabContent extends St.Bin {
             style_class: 'button clipboard-icon-button',
             child: new St.Icon({ icon_name: 'edit-delete-symbolic', icon_size: 16 }),
             can_focus: true,
-            y_expand: false,
             y_align: Clutter.ActorAlign.CENTER
         });
         deleteButton.connect('clicked', () => this._manager.deleteItem(itemData.id));
@@ -893,6 +918,11 @@ class ClipboardTabContent extends St.Bin {
      * Cleanup when the widget is destroyed
      */
     destroy() {
+        // Tell it to stop listening for our image size setting changes
+        if (this._settings && this._settingSignalId > 0) {
+            this._settings.disconnect(this._settingSignalId);
+        }
+
         if (this._manager) {
             if (this._historyChangedId) {
                 this._manager.disconnect(this._historyChangedId);

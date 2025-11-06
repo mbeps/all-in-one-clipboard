@@ -30,9 +30,9 @@ export default class AllInOneClipboardPreferences extends ExtensionPreferences {
         this._addGeneralGroup(page, settings);
         this._addTabManagementGroup(page, settings);
         this._addKeyboardShortcutsGroup(page, settings);
-        this._addClipboardHistoryGroup(page, settings);
         this._addRecentItemsGroup(page, settings);
         this._addAutoPasteGroup(page, settings);
+        this._addClipboardSettingsGroup(page, settings);
         this._addEmojiSettingsGroup(page, settings);
         this._addGifSettingsGroup(page, settings);
         this._addDataManagementGroup(page, settings, window);
@@ -430,65 +430,6 @@ export default class AllInOneClipboardPreferences extends ExtensionPreferences {
     }
 
     /**
-     * Add the "Clipboard History" preferences group to the page.
-     *
-     * @param {Adw.PreferencesPage} page - The preferences page to add the group to.
-     * @param {Gio.Settings} settings - The Gio.Settings instance.
-     */
-    _addClipboardHistoryGroup(page, settings) {
-        const group = new Adw.PreferencesGroup({
-            title: _('Clipboard History'),
-        });
-        page.add(group);
-
-        // Get the default value dynamically from the GSettings schema.
-        const key = 'clipboard-history-max-items';
-        const historyDefault = settings.get_default_value(key).get_int32();
-        const historyRange = this._getRangeFromSchema(settings, key);
-        const HISTORY_INCREMENT_NUMBER = 5;
-
-        const maxItemsRow = new Adw.SpinRow({
-            title: _('Maximum Clipboard History'),
-            subtitle: _('Number of items to keep in history (%d-%d). Default: %d.').format(
-                historyRange.min,
-                historyRange.max,
-                historyDefault
-            ),
-            adjustment: new Gtk.Adjustment({
-                lower: historyRange.min,
-                upper: historyRange.max,
-                step_increment: HISTORY_INCREMENT_NUMBER
-            }),
-        });
-        group.add(maxItemsRow);
-        settings.bind(key, maxItemsRow.adjustment, 'value', Gio.SettingsBindFlags.DEFAULT);
-
-        // Move to top on copy
-        const updateRecencyRow = new Adw.SwitchRow({
-            title: _('Move Item to Top on Copy'),
-            subtitle: _('When copying an item from history, make it the most recent.'),
-        });
-        group.add(updateRecencyRow);
-        settings.bind(
-            'update-recency-on-copy',
-            updateRecencyRow, 'active',
-            Gio.SettingsBindFlags.DEFAULT
-        );
-
-        // Unpin on paste
-        const unpinOnPasteRow = new Adw.SwitchRow({
-            title: _('Unpin Item on Paste'),
-            subtitle: _('Automatically unpin an item when it is pasted.'),
-        });
-        group.add(unpinOnPasteRow);
-        settings.bind(
-            'unpin-on-paste',
-            unpinOnPasteRow, 'active',
-            Gio.SettingsBindFlags.DEFAULT
-        );
-    }
-
-    /**
      * Add the "Recent Items" preferences group to the page.
      *
      * @param {Adw.PreferencesPage} page - The preferences page to add the group to.
@@ -577,6 +518,86 @@ export default class AllInOneClipboardPreferences extends ExtensionPreferences {
             autoPasteExpander.add_row(row);
             settings.bind(feature.key, row, 'active', Gio.SettingsBindFlags.DEFAULT);
         });
+    }
+
+    /**
+     * Add the "Clipboard Settings" preferences group to the page.
+     *
+     * @param {Adw.PreferencesPage} page - The preferences page to add the group to.
+     * @param {Gio.Settings} settings - The Gio.Settings instance.
+     */
+    _addClipboardSettingsGroup(page, settings) {
+        const group = new Adw.PreferencesGroup({
+            title: _('Clipboard Settings'),
+        });
+        page.add(group);
+
+        // Get the default value dynamically from the GSettings schema.
+        const key = 'clipboard-history-max-items';
+        const historyDefault = settings.get_default_value(key).get_int32();
+        const historyRange = this._getRangeFromSchema(settings, key);
+        const HISTORY_INCREMENT_NUMBER = 5;
+
+        const maxItemsRow = new Adw.SpinRow({
+            title: _('Maximum Clipboard History'),
+            subtitle: _('Number of items to keep in history (%d-%d). Default: %d.').format(
+                historyRange.min,
+                historyRange.max,
+                historyDefault
+            ),
+            adjustment: new Gtk.Adjustment({
+                lower: historyRange.min,
+                upper: historyRange.max,
+                step_increment: HISTORY_INCREMENT_NUMBER
+            }),
+        });
+        group.add(maxItemsRow);
+        settings.bind(key, maxItemsRow.adjustment, 'value', Gio.SettingsBindFlags.DEFAULT);
+
+        // Move to top on copy
+        const updateRecencyRow = new Adw.SwitchRow({
+            title: _('Move Item to Top on Copy'),
+            subtitle: _('When copying an item from history, make it the most recent.'),
+        });
+        group.add(updateRecencyRow);
+        settings.bind(
+            'update-recency-on-copy',
+            updateRecencyRow, 'active',
+            Gio.SettingsBindFlags.DEFAULT
+        );
+
+        // Unpin on paste
+        const unpinOnPasteRow = new Adw.SwitchRow({
+            title: _('Unpin Item on Paste'),
+            subtitle: _('Automatically unpin an item when it is pasted.'),
+        });
+        group.add(unpinOnPasteRow);
+        settings.bind(
+            'unpin-on-paste',
+            unpinOnPasteRow, 'active',
+            Gio.SettingsBindFlags.DEFAULT
+        );
+
+        // Clipboard image preview sizing
+        const previewKey = 'clipboard-image-preview-size';
+        const previewDefault = settings.get_default_value(previewKey).get_int32();
+        const previewRange = this._getRangeFromSchema(settings, previewKey);
+
+        const previewRow = new Adw.SpinRow({
+            title: _('Image Preview Size'),
+            subtitle: _('Pixel size for clipboard image thumbnails (%d-%d). Default: %d.').format(
+                previewRange.min,
+                previewRange.max,
+                previewDefault
+            ),
+            adjustment: new Gtk.Adjustment({
+                lower: previewRange.min,
+                upper: previewRange.max,
+                step_increment: 8
+            }),
+        });
+        group.add(previewRow);
+        settings.bind(previewKey, previewRow.adjustment, 'value', Gio.SettingsBindFlags.DEFAULT);
     }
 
     /**
