@@ -92,6 +92,7 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
         this._mainTabBar = null;
         this._explicitTabTarget = null;
         this._isOpeningViaShortcut = false;
+        this._alwaysShowTabBar = this._settings.get_boolean('always-show-tab-bar');
 
         this._currentTabVisibilitySignalId = 0;
         this._currentTabNavigateSignalId = 0;
@@ -115,6 +116,12 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
         // Listen for changes to the tab order and rebuild the tab bar in real-time.
         const tabOrderSignalId = this._settings.connect('changed::tab-order', () => this._rebuildTabBar());
         this._tabVisibilitySignalIds.push(tabOrderSignalId);
+
+        const alwaysShowTabsSignalId = this._settings.connect('changed::always-show-tab-bar', () => {
+            this._alwaysShowTabBar = this._settings.get_boolean('always-show-tab-bar');
+            this._updateTabBarVisibilityForActiveTab();
+        });
+        this._tabVisibilitySignalIds.push(alwaysShowTabsSignalId);
 
         // Run once on startup to set the initial state.
         this._updateTabsVisibility();
@@ -251,9 +258,23 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
      * @private
      */
     _setMainTabBarVisibility(isVisible) {
-        if (this._mainTabBar && this._mainTabBar.visible !== isVisible) {
-            this._mainTabBar.visible = isVisible;
+        const targetVisibility = this._alwaysShowTabBar ? true : isVisible;
+
+        if (this._mainTabBar && this._mainTabBar.visible !== targetVisibility) {
+            this._mainTabBar.visible = targetVisibility;
         }
+    }
+
+    _shouldShowTabBarForTab(tabName) {
+        if (this._alwaysShowTabBar || !tabName) {
+            return true;
+        }
+
+        return !this._fullViewTabs.includes(tabName);
+    }
+
+    _updateTabBarVisibilityForActiveTab() {
+        this._setMainTabBarVisibility(this._shouldShowTabBarForTab(this._activeTabName));
     }
 
     /**

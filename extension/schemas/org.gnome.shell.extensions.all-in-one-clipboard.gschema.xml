@@ -49,6 +49,11 @@
             <default>true</default>
             <summary>Enable the 'Clipboard' tab</summary>
         </key>
+        <key name="always-show-tab-bar" type="b">
+            <default>false</default>
+            <summary>Always show the main tab bar</summary>
+            <description>Keep the top tab buttons visible even when opening full-view tabs such as Emoji or GIF.</description>
+        </key>
 
         <!-- Keyboard Shortcuts -->
         <key name="shortcut-toggle-main" type="as">

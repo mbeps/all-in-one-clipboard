@@ -59,6 +59,7 @@ class EmojiTabContent extends St.Bin {
         this._settings = settings;
         this._skinToneableBaseChars = new Set();
         this._skinToneSettingsSignalIds = [];
+        this._alwaysShowTabsSignalId = 0;
         this._viewer = null;
 
         // Initialize asynchronous properties
@@ -99,6 +100,9 @@ class EmojiTabContent extends St.Bin {
         this._viewer = new CategorizedItemViewer(extension, settings, config);
         this.set_child(this._viewer);
 
+        this._applyBackButtonPreference();
+        this._alwaysShowTabsSignalId = settings.connect('changed::always-show-tab-bar', () => this._applyBackButtonPreference());
+
         // Connect signals to the now-existing viewer.
         this._viewer.connect('item-selected', (source, jsonPayload) => {
             this._onItemSelected(jsonPayload, extension);
@@ -118,6 +122,11 @@ class EmojiTabContent extends St.Bin {
             const signalId = settings.connect(`changed::${key}`, () => this._onSkinToneSettingsChanged());
             this._skinToneSettingsSignalIds.push(signalId);
         });
+    }
+
+    _applyBackButtonPreference() {
+        const shouldShowBackButton = !this._settings.get_boolean('always-show-tab-bar');
+        this._viewer?.setBackButtonVisible(shouldShowBackButton);
     }
 
     // =====================================================================
@@ -364,6 +373,15 @@ class EmojiTabContent extends St.Bin {
             }
         });
         this._viewer?.destroy();
+
+        if (this._settings && this._alwaysShowTabsSignalId > 0) {
+            try {
+                this._settings.disconnect(this._alwaysShowTabsSignalId);
+            } catch (e) {
+                // Ignore disconnection errors
+            }
+            this._alwaysShowTabsSignalId = 0;
+        }
         super.destroy();
     }
 });

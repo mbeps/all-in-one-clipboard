@@ -207,6 +207,13 @@ export default class AllInOneClipboardPreferences extends ExtensionPreferences {
             settings.bind(config.key, row, 'active', Gio.SettingsBindFlags.DEFAULT);
         }
 
+        const alwaysShowTabsRow = new Adw.SwitchRow({
+            title: _('Always Show Top Tabs'),
+            subtitle: _('Keep the main tab buttons visible in every view.')
+        });
+        group.add(alwaysShowTabsRow);
+        settings.bind('always-show-tab-bar', alwaysShowTabsRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+
         const defaultTabRow = new Adw.ComboRow({
             title: _('Default Tab'),
             subtitle: _('The tab that opens when you first open the menu.')
