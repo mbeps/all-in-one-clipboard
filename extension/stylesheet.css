@@ -36,6 +36,10 @@
     text-align: center;
 }
 
+.aio-clipboard-container .internal-header {
+    margin-top: 6px;
+}
+
 /* --- Search Specific UI --- */
 .aio-clipboard-container .aio-search-bar-container {
     height: 35px;

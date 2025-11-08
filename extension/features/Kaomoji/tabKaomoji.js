@@ -34,6 +34,7 @@ class KaomojiTabContent extends St.Bin {
 
         // Store settings for later use
         this._settings = settings;
+        this._alwaysShowTabsSignalId = 0;
 
         const config = {
             jsonPath: 'data/kaomojis.json',
@@ -57,6 +58,9 @@ class KaomojiTabContent extends St.Bin {
         this._viewer = new CategorizedItemViewer(extension, settings, config);
         this.set_child(this._viewer);
 
+        this._applyBackButtonPreference();
+        this._alwaysShowTabsSignalId = settings.connect('changed::always-show-tab-bar', () => this._applyBackButtonPreference());
+
         // Connect to Viewer Signals
         this._viewer.connect('item-selected', (source, jsonPayload) => {
             this._onItemSelected(jsonPayload, extension);
@@ -65,6 +69,11 @@ class KaomojiTabContent extends St.Bin {
         this._viewer.connect('back-requested', () => {
             this.emit('navigate-to-main-tab', _("Recently Used"));
         });
+    }
+
+    _applyBackButtonPreference() {
+        const shouldShowBackButton = !this._settings.get_boolean('always-show-tab-bar');
+        this._viewer?.setBackButtonVisible(shouldShowBackButton);
     }
 
     // =====================================================================
@@ -187,6 +196,14 @@ class KaomojiTabContent extends St.Bin {
      * Cleans up resources when the widget is destroyed.
      */
     destroy() {
+        if (this._settings && this._alwaysShowTabsSignalId > 0) {
+            try {
+                this._settings.disconnect(this._alwaysShowTabsSignalId);
+            } catch (e) {
+                // Ignore errors during cleanup
+            }
+            this._alwaysShowTabsSignalId = 0;
+        }
         this._viewer?.destroy();
         super.destroy();
     }
