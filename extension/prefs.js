@@ -185,11 +185,28 @@ export default class AllInOneClipboardPreferences extends ExtensionPreferences {
         page.connect('unmap', disconnectSignals);
 
         const TAB_VISIBILITY_CONFIG = {
+            'Recently Used': { key: 'enable-recents-tab', title: _('Recently Used Tab') },
             'Emoji':     { key: 'enable-emoji-tab', title: _('Emoji Tab') },
             'GIF':       { key: 'enable-gif-tab', title: _('GIF Tab') },
             'Kaomoji':   { key: 'enable-kaomoji-tab', title: _('Kaomoji Tab') },
             'Symbols':   { key: 'enable-symbols-tab', title: _('Symbols Tab') },
             'Clipboard': { key: 'enable-clipboard-tab', title: _('Clipboard Tab') },
+        };
+
+        const tabVisibilityRows = [];
+
+        const updateTabToggleSensitivity = () => {
+            const states = tabVisibilityRows.map(item => ({
+                item,
+                enabled: settings.get_boolean(item.config.key),
+            }));
+
+            const enabledCount = states.filter(state => state.enabled).length;
+
+            states.forEach(state => {
+                const shouldDisable = enabledCount === 1 && state.enabled;
+                state.item.row.set_sensitive(!shouldDisable);
+            });
         };
 
         const visibleTabsExpander = new Adw.ExpanderRow({
@@ -204,6 +221,7 @@ export default class AllInOneClipboardPreferences extends ExtensionPreferences {
                 subtitle: config.subtitle || ''
             });
             visibleTabsExpander.add_row(row);
+            tabVisibilityRows.push({ config, row });
             settings.bind(config.key, row, 'active', Gio.SettingsBindFlags.DEFAULT);
         }
 
@@ -221,12 +239,8 @@ export default class AllInOneClipboardPreferences extends ExtensionPreferences {
             visibleTabsForModel = [];
 
             tabOrder.forEach(originalTabName => {
-                if (originalTabName === 'Recently Used') {
-                    visibleTabsForModel.push({ original: originalTabName, translated: _(originalTabName) });
-                    return;
-                }
                 const config = TAB_VISIBILITY_CONFIG[originalTabName];
-                if (config && settings.get_boolean(config.key)) {
+                if (!config || settings.get_boolean(config.key)) {
                     visibleTabsForModel.push({ original: originalTabName, translated: _(originalTabName) });
                 }
             });
@@ -241,8 +255,13 @@ export default class AllInOneClipboardPreferences extends ExtensionPreferences {
             }
         };
 
+        const handleTabVisibilityChange = () => {
+            updateDefaultTabModel();
+            updateTabToggleSensitivity();
+        };
+
         Object.values(TAB_VISIBILITY_CONFIG).forEach(config => {
-            signalIds.push(settings.connect(`changed::${config.key}`, updateDefaultTabModel));
+            signalIds.push(settings.connect(`changed::${config.key}`, handleTabVisibilityChange));
         });
         signalIds.push(settings.connect('changed::tab-order', updateDefaultTabModel));
 
@@ -256,7 +275,7 @@ export default class AllInOneClipboardPreferences extends ExtensionPreferences {
             }
         });
 
-        updateDefaultTabModel();
+        handleTabVisibilityChange();
 
         const tabOrderExpander = new Adw.ExpanderRow({
             title: _('Tab Order'),
