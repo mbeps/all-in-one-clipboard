@@ -98,6 +98,7 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
         this._selectTabTimeoutId = 0;
         this._loadingIndicatorTimeoutId = 0;
         this._tabVisibilitySignalIds = [];
+        this._forceHideMainTabBar = false;
 
         const icon = new St.Icon({ icon_name: 'edit-copy-symbolic', style_class: 'system-status-icon' });
         this.add_child(icon);
@@ -251,8 +252,10 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
      * @private
      */
     _setMainTabBarVisibility(isVisible) {
-        if (this._mainTabBar && this._mainTabBar.visible !== isVisible) {
-            this._mainTabBar.visible = isVisible;
+        const shouldBeVisible = isVisible && !this._forceHideMainTabBar;
+
+        if (this._mainTabBar && this._mainTabBar.visible !== shouldBeVisible) {
+            this._mainTabBar.visible = shouldBeVisible;
         }
     }
 
@@ -303,6 +306,14 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
                 visibleTabs.add(name);
             }
         });
+
+        this._forceHideMainTabBar = visibleTabs.size <= 1;
+
+        if (this._forceHideMainTabBar) {
+            this._setMainTabBarVisibility(false);
+        } else if (!this._activeTabName || !this._fullViewTabs.includes(this._activeTabName)) {
+            this._setMainTabBarVisibility(true);
+        }
 
         // Ensure that the active and last active tabs are visible
         const safeFallback = _("Recently Used");
