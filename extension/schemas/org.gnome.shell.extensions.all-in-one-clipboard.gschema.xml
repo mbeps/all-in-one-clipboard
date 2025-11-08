@@ -29,6 +29,10 @@
             <summary>The tab to open by default.</summary>
             <description>Defines which tab is opened when the menu is activated via the panel icon or main toggle shortcut.</description>
         </key>
+        <key name="enable-recents-tab" type="b">
+            <default>true</default>
+            <summary>Enable the 'Recently Used' tab</summary>
+        </key>
         <key name="enable-emoji-tab" type="b">
             <default>true</default>
             <summary>Enable the 'Emoji' tab</summary>

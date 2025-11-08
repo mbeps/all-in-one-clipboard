@@ -32,7 +32,7 @@ const TABS = [
         name: "Recently Used",
         icon: 'utility-recents-symbolic.svg',
         isFullView: false,
-        settingKey: null
+        settingKey: 'enable-recents-tab'
     },
     {
         name: "Emoji",
@@ -99,6 +99,7 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
         this._loadingIndicatorTimeoutId = 0;
         this._tabVisibilitySignalIds = [];
         this._forceHideMainTabBar = false;
+        this._visibleTabNames = new Set();
 
         const icon = new St.Icon({ icon_name: 'edit-copy-symbolic', style_class: 'system-status-icon' });
         this.add_child(icon);
@@ -306,6 +307,7 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
                 visibleTabs.add(name);
             }
         });
+        this._visibleTabNames = visibleTabs;
 
         this._forceHideMainTabBar = visibleTabs.size <= 1;
 
@@ -316,17 +318,29 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
         }
 
         // Ensure that the active and last active tabs are visible
-        const safeFallback = _("Recently Used");
-        if (this._activeTabName && !visibleTabs.has(this._activeTabName)) {
+        const fallbackTarget = this._getFirstVisibleTabName();
+        if (this._activeTabName && !visibleTabs.has(this._activeTabName) && fallbackTarget) {
             if (this.menu?.isOpen) {
-                this._selectTab(safeFallback);
+                this._selectTab(fallbackTarget);
             } else {
-                this._activeTabName = safeFallback;
+                this._activeTabName = fallbackTarget;
             }
         }
-        if (this._lastActiveTabName && !visibleTabs.has(this._lastActiveTabName)) {
-            this._lastActiveTabName = safeFallback;
+        if (this._lastActiveTabName && !visibleTabs.has(this._lastActiveTabName) && fallbackTarget) {
+            this._lastActiveTabName = fallbackTarget;
         }
+    }
+
+    /**
+     * Retrieves the first visible tab name based on the current user order.
+     * @returns {string|null} The translated tab name if available, otherwise null.
+     * @private
+     */
+    _getFirstVisibleTabName() {
+        for (const name of this._visibleTabNames) {
+            return name;
+        }
+        return null;
     }
 
     /**
@@ -484,7 +498,14 @@ class AllInOneClipboardIndicator extends PanelMenu.Button {
                 if (GObject.signal_lookup('navigate-to-main-tab', newContentActor.constructor.$gtype)) {
                     this._currentTabNavigateSignalId = newContentActor.connect('navigate-to-main-tab', (actor, targetTabName) => {
                         if (this.TAB_NAMES.includes(targetTabName)) {
-                            this._selectTab(targetTabName);
+                            if (this._visibleTabNames.has(targetTabName)) {
+                                this._selectTab(targetTabName);
+                            } else {
+                                const fallbackTab = this._getFirstVisibleTabName();
+                                if (fallbackTab) {
+                                    this._selectTab(fallbackTab);
+                                }
+                            }
                         }
                     });
                 }
